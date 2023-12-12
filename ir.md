@@ -32,51 +32,161 @@ To understand how facts are extracted in gccrs and rustc, we need to understand 
 
 ## GCC vs LLVM
 
-To understand the differences between gccrs and rustc, we must first explore the differences of the compiler platforms they are built on.
-Gccrs is build on top of GCC, while rustc is built on top of LLVM.
-We will only focus on front-end and middle-end of each compiler platform, since back-end is not relevant to borrow-checking.
+To understand the differences between gccrs and rustc, we must first explore the differences of the compiler platforms they are built
+on (GCC and LLVM).
+We will only focus on the middle-end of each compiler platform, since the back-end is not relevant to borrow-checking.
 
-The core of LLVM is a three-address code (3-AD) representation called the LLVM intermediate representation (LLVM IR).
-This IR is the interface between the front-end and the compiler platform (middle-end and back-end).
-Three-address code represents the program as sequences of statements (we call such sequence a *basic block*).
-Connected by control flow instructions, forming a control flow graph (CFG).
-The fact that the LLVM IR is a 3-AD representation is very important to how the program is represented inside rustc.
+The core of LLVM is a three-address code (3-AD) [^](Three-address code represents the program as a sequence of statements (we call such sequence a
+*basic block*), connected by control flow instructions, forming a control flow graph (CFG).) representation called the LLVM intermediate
+representation (LLVM IR) [https://llvm.org/docs/Reference.html#llvm-ir].
+This IR is the interface between front-ends and the compiler platform (the middle-end and the back-end). Each front-end is responsible for
+transforming its AST into the LLVM IR.
+The LLVM IR is stable and strictly separated from the front-end.
 
-GCC, on the other hand, interfaces with the front-ends on a tree-like representation called the GENERIC.
-This representation is based on the AST of the C front end, but it can store information specific to each front-end.
-This representation is then transformed into a GIMPLE representation, which is a 3-AD representation.
-This transformation is already done inside the compiler platform, not in the front-end.
-GENERIC representation cannot contain information specific to each front-end
-[^2](This is not entirely true. There are hacks that are used to annotate GIMPLE statements with specific information using dummy statements.).
-This approach allows the front-ends to be smaller and pushing more works into the shared part.
+![LLVM IR CFG (Compiler Explorer)](./llvm-ir-cfg-example.svg)
+
+[//]: # (TODO: picture)
+
+GCC, on the other hand, interfaces with the front-ends on a tree-based representation called the
+GENERIC [#](https://gcc.gnu.org/onlinedocs/gccint/GENERIC.html).
+GENERIC was created generalized form of AST shared by most front-ends.
+GCC provides a set of common tree nodes to describe all the common language constructs in the GENERIC IR.
+Front-ends may define language-specific constructs and provide hooks for their
+handling. [#](gccint:212)[#](https://gcc.gnu.org/onlinedocs/gccint/Language-dependent-trees.html)
+This representation is then transformed into a GIMPLE representation [#](https://gcc.gnu.org/onlinedocs/gccint/GIMPLE.html), which is a mostly[^]("
+GIMPLE that is not fully lowered is
+known as “High GIMPLE” and consists of the IL before the pass pass_lower_cf. High
+GIMPLE contains some container statements like lexical scopes (represented by GIMPLE_
+BIND) and nested expressions (e.g., GIMPLE_TRY), while “Low GIMPLE” exposes all of the
+implicit jumps for control and exception expressions directly in the IL and EH region trees." [#](gccint:225)) 3-AD
+representation, by breaking down expression into a sequence of statements, introducing temporary variables.
+This transformation is done inside the compiler platform, not in the front-end.
+This approach allows the front-ends to be smaller and shifting more works into the shared part.
+GIMPLE representation does not contain information specific to each front-end (programming language).
+It is only possible to add completely new statements.
+[#](gccint:262) This is possible, because GIMPLE is not a stable interface.
+
+The key takeaway is that rustc has to transform the tree-based representation into a 3-AD representation itself.
+That means that it has access to the control flow graph (CFG) of the program.
+This is not the case for gccrs.
+In GCC, the CFG is only available in the Low GIMPLE representation, deep inside the middle-end.
 
 ## Rustc's representation
 
-Rustc's parser produces an abstract syntax tree (AST) from a stream of tokens.
+```rust
+struct Foo(i32);
+
+fn foo(x: i32) -> Foo {
+    Foo(x)
+}
+```
+
+> This very simple code will be used as an example throughout this section.
+
+In the previous section, we have seen that rustc is responsible for transforming the code all the way from the raw text to the LLVM IR.
+Given the high complexity of the Rust language, rustc uses multiple intermediate representations (IR) to simplify the process.
+The text is first tokenized and parsed into the abstract syntax tree (AST),
+which is then transformed into the high-level intermediate representation (HIR).
+For transformation into a middle-level intermediate representation (MIR), the HIR is first transformed into a typed HIR (THIR).
+The MIR is then transformed into the LLVM IR.
+
 AST is a tree-based representation of the program, which closely follows each token in the source code.
 At this stage, rustc performs macro-expansion and a partial name resolution (macros and
 imports) [https://rustc-dev-guide.rust-lang.org/macro-expansion.html, https://rustc-dev-guide.rust-lang.org/name-resolution.html].
-AST is then transformed into a high-level intermediate representation (HIR).
+As the AST is lowered to HIR, some complex language constructs are desuggared to simpler constructs.
+For example,
+various kinds of loops are transformed to a single infinite loop construct
+(Rust `loop` keyword) and many structures that can perform pattern matching (`if let`, `while let`, `?` operator) are transformed to a `match`
+construct.
+
+```
+Fn {
+  generics: Generics { ... },
+  sig: FnSig {
+    header: FnHeader { ... },
+      decl: FnDecl {
+        inputs: [
+          Param {
+            ty: Ty { Path { segments: [ PathSegment { ident: i32#0 } ] } },
+            pat: Pat { Ident(x#0) }
+          },
+        ],
+        output: Ty { Path { segments: [ PathSegment { ident: Foo#0 } ] }
+      },
+  },
+  body: Block {
+    stmts: [ Stmt { Expr {
+      Call(
+        Expr { Path { segments: [ PathSegment { ident: Foo#0 } ] } },
+        params: [
+          Expr { Path { segments: [ PathSegment { ident: x#0 } ] } }
+        ]
+      )
+    ]
+  }
+}
+```
+
+> This is a textual representation of a small and simplified part of the abstract syntax tree (AST) of the example program.
+
 HIR is the main representation used for most rustc operations [https://rustc-dev-guide.rust-lang.org/hir.html].
-It combines a desuggared version of the AST (for example, all loops are transformed to a single infinite loop construct  (Rust `loop` keyword)) with
-additional tables and maps
-for quick access to information.
-Typechecking,
-which includes both checking the type correctness of the program as well as type inference,
-generic type substitution and most other type operations, are performed on HIR.
-[https://rustc-dev-guide.rust-lang.org/type-checking.html] The HIR representaion can contain many placeholders and "optional"
-fields that are resolved dusing the HIR analysis.
-To simplify further processing, parts of HIR that correspond to executable code (e.g. not type definitions) are transformed to THIR
+It combines a simplified version of the AST with additional tables and maps for quick access to information.
+For example, those tables contain information about the types of expressions and statements.
+Those are used for analysis passes, like full (late) resolution and typechecking.
+The typechecking process, which includes both checking the type correctness of the program as well as the type inference and resolution of implicit
+langugage constructs.
+[#](https://rustc-dev-guide.rust-lang.org/type-checking.html)
+
+```
+#[prelude_import]
+use ::std::prelude::rust_2015::*;
+#[macro_use]
+extern crate std;
+struct Foo(i32);
+
+fn foo(x: i32) -> Foo { Foo(x) }
+```
+
+> **One of HIR dump formats:**
+> HIR structure still corresponds to a valid Rust program, equivalent to the original one. rustc provides a textual representation of HIR, which is
+> displays such program.
+
+The HIR representation can contain many placeholders and "optional" fields that are resolved during the HIR analysis.
+To simplify further processing, parts of HIR that correspond to executable code (e.g. not type definitions) are transformed into THIR
 (Typed High-Level Intermediate Representation) where all the missing informaion (mainly types) must be resolved.
 The reader can think about HIR and THIR in terms of the builder pattern [https://en.wikipedia.org/wiki/Builder_pattern],
-where HIR provides flexible interface for modification and THIR the final immutable representation.
+where HIR provides flexible interface for modification and THIR the final immutable representation
 This does not only involve the data explicitly stored in HIR, but also parts of the program, that are implied from the type system.
 Operator overloading, automatic references and dereferences, etc. are all resolved at this stage.
-One more notable difference is that expression and statements (and match arms) are all stored in a list and refer to each other using indices,
-instead of pointers.
-This provides a more compact representation.
-The final rustc IR is the MIR (Mid-level Intermediate Representation).
-MIR is a three-address code representation, similar to LLVM IR but with specific rustc constructs.
+
+The final rustc IR that is lowered directly to LLVM IR is the MIR (Mid-level Intermediate Representation).
+We will pay extra attention to MIR because it is the main representation used by the borrow-checker.
+MIR is a three-address code representation, similar to LLVM IR but with Rust specific constructs.
+It consists of basic blocks, which are sequences of statements connected by control flow instructions.
+The statements operate on places and rvalues. A place (often called lvalue in other languages) is an abstract representation of a memory location.
+It is either a local variable, a field, index or dereference of another place.
+
+MIR contains information about types, including lifetimes.
+It differentiates pointers and references, as well as mutable and immutable references.
+It is aware of panics and stack unwinding.
+It contains additional information for borrow-checker, like storage live/dead annotations,
+which denote when a place is first used or last used, and false operations which help with the analysis.
+For example, a false unwind operation inside infinite loops, to ensure that there is an exit edge in the CFG.
+This can be critical for algorithms, that process the CFG in reverse order.
+
+```
+fn foo(_1: i32) -> Foo {
+    debug x => _1;
+    let mut _0: Foo;	
+
+    bb0: {
+        _0 = Foo(_1);
+        return;
+    }
+}
+```
+
+> **MIR dump example**
 
 For further details, see the [Source Code Representation]() chapter of the rustc developer guide.
 
