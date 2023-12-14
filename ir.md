@@ -22,6 +22,8 @@
 
 ### BIR fact collection and checking
 
+# IR
+
 Building a borrow-checker consists of two main parts.
 First, we need to extract information about the program.
 We will call that information *facts*.
@@ -174,6 +176,24 @@ which denote when a place is first used or last used, and false operations which
 For example, a false unwind operation inside infinite loops, to ensure that there is an exit edge in the CFG.
 This can be critical for algorithms, that process the CFG in reverse order.
 
+In addition to code representation, there is also representation for types.
+Initially, types are represented in HIR on syntactic level.
+Every mention of a type in HIR is a distinct HIR node.
+Those types are compiled into a representation called TyTy, where each type is represented by a single instance.
+(This is achieved by interning.
+Note, that there can be multiple equivalent type of different structure.
+Those are represented by different TyTy instances.) Each non-primitive type forms a tree (e.g. reference to a pair of integer and char), where the
+inner nodes are shared (due to interning). Generic types, which are of special interest to borrow-checking, are represented as a pair:
+an inner type and a list of generic parameters.
+When generic types parameters are substituted for concrete types, the new type is place into the parameter list.
+The inner type is left unchanged.
+Finally, there is a procedure, which transforms the generic type into a concrete type.
+
+Inside the HIR, after the type-checking analysis, types of nodes can be looked up based on the node's ID in one of the helper tables
+(namely, the typecheck context).
+Each THIR node directly contains a pointer to its type.
+In MIR the type is stored in each place.
+
 ```
 fn foo(_1: i32) -> Foo {
     debug x => _1;
@@ -190,119 +210,156 @@ fn foo(_1: i32) -> Foo {
 
 For further details, see the [Source Code Representation]() chapter of the rustc developer guide.
 
+## Rust GCC representation
+
+The gccrs representation is strongly inspired by rustc and diverges mostly for two reasons: for simplicity,
+since gccrs is still in a early stage, and due to the specifics of the GCC platform.
+Gccrs uses AST, HIR and TyTy representations, but it does not use THIR or MIR.
+
+AST and HIR representation are similar to rustc's, with less features supported.
+The main difference is the structure of the representation.
+Rustc takes advantaged of algebraic data types resulting in very fine-grained representation.
+On the other hand gccrs is severly limited by capabilities of C++ and is forced to use an object-oriented approach.
+
+There is no THIR and MIR or any equivalent in gccrs.
+MIR cannot be used in GCC unless a the whole gccrs code generation is rewritten to output GIMPLE instead of GENERIC,
+which would be way more complex then the current approach.
+Given the limited development resources of gccrs, this is not a viable
+option. [#](https://gcc-rust.zulipchat.com/#narrow/stream/281658-compiler-development/topic/Borrowchecking.20vs.20.28H.29IR)
+THIR
+
+TyTy type representions is simplified in gccrs and does not provide any uniqueness guarantees.
+There is a notable difference in the representation of generic types.
+Instead of being built on top of ther types (generic type of top of struct tupe) like in rustc,
+types that support generic parameters inherit from a common base class.
+That means, that the type definition is not shared between different generic types.
+The advantage of this approach is that during substitution of generic parameters,
+the inner types are modified at the time of each substitution, which simplifies intermediate handling, like type
+inference. [todo, ask Phillip, if this is true]
+
 # Rust GCC Borrow-checker Design
 
 > This section discusses the intermediate representation in gccrs. Since gccrs is a second implementation of the Rust compiler, it is heavily inspired
 > by rustc. Therefore this section will assume familiarity with rustc's intermediate representations, described in the previous section. We will focus
 > on similarities and differences between rustc and gccrs, rather than describing the gccrs intermediate representation in detail.
 
-The Rust GCC borrow-checker is designed to be as similar to the `rustc` borrow-checker as possible withing the constraints of the Rust GCC IR.
+The Rust GCC borrow-checker is designed to be as similar to the `rustc` borrow-checker as possible withing the constraints of the Rust GCC.
 This allows us to leverage the existing knowledge about borrow-checking in Rust.
-The differences between the IR and the challenges they pose are discussed in the previous chapter.
-The main decision of the Rust GCC borrow-checker is to reuse the dataflow analysis engine from rustc.
-The interface between the analysis engine and the compiler consist of passing a set of facts to the analysis engine.
+The checking works in two phases.
+First, it collects information (called facts) about the program, which typically takes a form of tuples of numbers.
+Then it passes the facts to the analysis engine, which computes the results of the analysis.
+The compiler then receives back the facts involved in rules violations and translates them into error messages.
+The main decision of the Rust GCC borrow-checker is to reuse the analysis engine from rustc.
+To connect the Polonius engine written in Rust to the gccrs compiler written in C++, we
 
-Ever since the introduction of NLL in rustc, the analysis is control-flow sensitive.
-This requires us to collect the required facts from a control-flow graph based IR which still contains rust specific information.
+## Analysis of the fact collection problem
 
+This section described options for fact collection in gccrs that were considered and experimented with during the initial design phase.
+Due to the differences between internal representations of rustc and gccrs it was not possible to simply adopt the rustc's approach.
+Considered options were to use HIR directly, to implement MIR in gccrs,
+or to design a new IR for borrow-checking with multiple option to place it inside the compilation pipeline.
+
+Ever since the introduction of NLL in rustc (see section TODO), the analysis is control-flow sensitive.
+This requires us to match the required facts, which are specific to Rust semantics, with control-flow graph nodes.
 We need to distinguish between pointers (in unsafe Rust) and references.
 Pointer is not subject to borrow-checking, but references are.
 Furthermore, we need to distinguish between mutable and immutable references, since they have different rules, essential for borrow-checking
-[^](The key rule of borrowchecking is the for a single borrowed variable,
+[^](The key rule of borrow-checking is the for a single borrowed variable,
 there can only be a single mutable borrow, or only immutable borrows valid at each point of the CFG.).
-Each type has to carry information about lifetimes it contains and their variances.
+Each type has to carry information about lifetimes it contains and their variances (described later in this chaper).
 For explicit user type annotation, we need to store the explicit lifetime parameters.
 
-The only IR in GCC what contains the CFG information is GIMPLE; however, under normal circumstances GIMPLE is supposed to be language agnostic.
+The only IR in GCC what contains the CFG information is GIMPLE; however, under normal circumstances GIMPLE is language agnostic.
 It is possible to annotate the GIMPLE statements with language specific information,
-using special statements [quote Jan Hubicka consulations], however it is very complicated.
+using special statements, which would have to be generated from special information that would need to be added GENERIC.
+The statemenets would need to be preserved by the middle-end passes until the pass building the CFG (that includes 11 passes),
+after which the facts could be collected.
+After that,
+the facts would need
+to be discared to avoid complicating the tens of following passes[#](passes.def)[#](https://gcc.gnu.org/onlinedocs/gccint/Passes.html) and RTL
+generation.
+This approach was discussed with senior GCC developers and quickly rejected as it would require large amount of work and it would leak front-end
+specific information into the middle-end,
+making it more complex.
+No attempt was made to experiment with this approach.
 
-Initially, we have attempted to collect the information from HIR and compute and approximate CFG as we go.
+Since it was clear that we need to build a possibly approximate GFC. It is not necessary to work with a particular control flow graph created by the
+compiler. Any CFG that is consistent with
+Rust semantics is sufficient.
+In particular, adding any edges and merging nodes in the CFG is conservative with regards to the borrow-checking analysis,
+and it many cases it does not change the result.
+This fact is exploited by the rustc in at least two ways.
+Match CFG is simplified and fake edges are added to loops to ensure that there is an exit edge.
+
+Initially,
+we have attempted to collect the information from HIR and compute and approximate CFG as we go.
 This can work nicely for simple language constructs,
-that are local, but its get very compicated for more complex constructs like patterns,
-loops with breaks and continues, etc. Further more, it was not clear, how to handle panics and unwinding.
-An option to ease such problems was to radically desuggar the HIR to only basic constructs.
+that are local, but its get very complicated for more complex constructs like patterns,
+loops with breaks and continues, etc, and since no "code" is generated, there is no easy way to verify the process, not even by manual checking.
+Further more, it was not clear, how to handle panics and stack unwinding.
+
+An option to ease such problems was to radically desuggared the HIR to only basic constructs.
 An advantage of this approach would be that it would leverage the code already existing in the code generator,
 possibly making the code generation easier.
-The most extreme case would be to add rustc's MIR to gccrs.
+Also,
+the code generator already preforms some of those tranformations locally
+(not applying them back to HIR, but using them directly for GENERIC generation).
+Problem, that quickly arose was that the HIR visitor system was not designed for HIR-to-HIR transformations, where new nodes would be created.
+Many of such transformations,
+like explicit handling of automatic referencing and dereferencing would require information about the types of each node,
+which would in return require name resolution.
+Therefofore those transformation would have to happen after all analysis passes on HIR are completed.
+However, all of that information would need to be updated for the newly created nodes.
+The code generator partly avoids this problems by querying the GENERIC API for the some information it needs about already compiled code.
+This fact would complicated leveraging those existing thransformations on the HIR level.
+Rustc avoid this problem by doing such tranformations on the HIR-THIR boundary, and not modifying the HIR itself.
+Since this modification would be complicated and it would only be a preparation for the borrow-checking,
+it was decided not to proceed in this direction at that time.
+Hovewer, it was found that some transformation can be done on the AST-HIR boundary.
+This approach can be done mostly independently (only code handling the removed nodes is also removed, but no additions or modifications are needed).
+It was agreed that such transformations are useful and should be implemented regardless of the path taken by the borrow-checker.
+Those transformations include mainly loops and pattern matching structures.
+Those transformations are even documented in the rust reference [citation needed].
+
+> At the time of writing this thesis, desugaring of for loop was implemented by Philip Herron.
+> And more desugaring is in progress or planned.
+> Hovever, I have focused on the borrow-checking itself and for the time being I have ignored the complex constructs, assuming that they will be
+> eventualy desugared to constructs tha borrow-checker already can handle.
+
+To make sure that all possible approaches were considered, we have discussed the possibility of implementing MIR in gccrs.
 This approached as some advantages and many problems.
-The main advange for borrow-checking is that the process of lowering HIR to MIR would be covered by the current testsuite.
-Another advantage, if full compatibility with rustc's MIR is achieved, is that many MIR based tools (like MIRI) could be used with gccrs.
-Also the borrow-checking itself would be very similar to rustc's borrow-checking.
+Should the MIR be implemented in a completely compatible way, it would be possible to use tools like MIRI with gccrs.
+The borrowchecking would be very similar to rustc's borrow-checking and parts of rustc's code might even get reused.
+Gccrs would also be more ready for rust specific optimizations.
+The final advantage would be that the process of lowering HIR to MIR would be covered by the current testsuite
+as all transformations would affect the code genetration.
 The main problem with this approach is that it would require a large portion of gccrs to be reimplemented,
 delaying the project by a considerable amount of time.
 Should such an approach be taken, any effort on borrow-checking would be delayed until the MIR is implemented.
-It was decided by the maintainers that such an approach is not feasible and that gccrs will not use MIR in any forseable future.
-The effort to lift the HIR simplification done in the code generator to a HIR-to-HIR simplification pass was also abandoned, due to high reliace of
-such passes on the GENERIC API. After further discussion with the maintainers, it was decided that the best apporach is to duplicate the work and
-possibly unify it later. After Arthur Cohen suggesting to keep the things simple, I have decided to experiment with another apporoach. To build a
-extremply simplified MIR-like IR, that keeps only the bare minimum of information needed for borrow-checking. Given unexpected productivity of this
-approach, it was decided to go on with it.
+It was decided by the maintainers[#](https://gcc-rust.zulipchat.com/#narrow/stream/281658-compiler-development/topic/Borrowchecking.20vs.20.28H.29IR)
+that such approach is not feasible and that gccrs will not use MIR in any foreseeable future.
+
+After Arthur Cohen suggesting to keep the things more simple, I have decided to experiment with a different, minimalistic approach -
+to build a radically simplified MIR-like IR, that keeps only the bare minimum of information needed for borrow-checking.
+Given the unexpected productivity of this approach, it was decided to go on with it.
 This IR, later called the borrow-checker IR (BIR), only focuses on flow of data and it ignores the actual operations on the data.
 The main disadvantage of this approach is that it creates a dead branch of the compilation pipeline,
-that is not used for code generation and therefore it is not covered by the existing testsuite.
-To overcome this difficulty, the BIR and it's textual representatio (dump) is designed to be as similar to rustc's MIR as possible.
-This allows us to check the generated BIR againts the MIR generated by rustc, at least for simple programs.
+that is not used for code generation, and therefore it is not covered by the existing testsuite.
+To overcome this difficulty, the BIR, and its textual representation (dump) is designed to be as similar to rustc's MIR as possible.
+This allows us to check the generated BIR against the MIR generated by rustic, at least for simple programs.
+This is the final approach used by this work.
+Details of the BIR design are described in the next section.
 
-## BIR Dump Example
-
-An example program calculating the i-th fibonacci number:
-
-```rust
-
-fn fib(i: usize) -> i32 {
-    if i == 0 || i == 1 {
-        1
-    } else {
-        fib(i - 1) + fib(i - 2)
-    }
-}
-```
-
-Here is an example of BIR dump (note: this needs to be updated regularly):
+## Borrow-checker IR Design
 
 ```
 fn fib(_1: usize) -> i32 {
-    let _0: i32;
-    let _2: i32;
-    let _3: bool;
-    let _4: bool;
-    let _5: bool;
-    let _6: usize;
-    let _7: i32;
-    let _8: usize;
-    let _9: i32;
-    let _10: i32;
-
     bb0: {
         _4 = Operator(_1, const usize);
         switchInt(_4) -> [bb1, bb2];
     }
 
-    bb1: {
-        _3 = const bool;
-        goto -> bb3;
-    }
-
-    bb2: {
-        _5 = Operator(_1, const usize);
-        _3 = _5;
-        goto -> bb3;
-    }
-
-    bb3: {
-        switchInt(_3) -> [bb4, bb7];
-    }
-
-    bb4: {
-        _2 = const i32;
-        goto -> bb8;
-    }
-
-    bb5: {
-        _6 = Operator(_1, const usize);
-        _7 = Call(fib)(_6, ) -> [bb6];
-    }
+    ... 
 
     bb6: {
         _8 = Operator(_1, const usize);
@@ -320,64 +377,34 @@ fn fib(_1: usize) -> i32 {
         return;
     }
 }
-
-
 ```
 
-The dump consists of:
+> Shortened example of BIR dump of a simple Rust program, computing a Fibonacci number.
+> The source code and full dump together with a legend can be found in the
+> appendix. [crossref, todo make the apeendix]
+> This example comes from a "BIR Design Notes",
+> which is part of the source tree
+> and where provides an introduction for a developer getting familiar with the basic aspects of the borrow-checker implementation.
 
-- A function header with arguments: `fn fib(_1: usize) -> i32 { ... }`.
-- Declaration of locals: `let _0: i32;`, where `_0` is the return value (even if it is of the unit type). Arguments are not listed here, they are
-  listed in the function header.
-- A list of basic blocks: `bb0: { ... }`. The basic block name is the `bb` prefix followed by a number.
-- Each basic block consists of a list of BIR statements. Instruction can be either assigned to a local (place) or be a statement.
-  Instructions take locals (places) as arguments.
-- Each basic block is terminated with a control flow instruction followed by a list of destinations:
-    - `goto -> bb3;` - a goto instruction with a single destination.
-    - `switchInt(_3) -> [bb4, bb7];` - a switch instruction with multiple destinations.
-    - `return;` - a return instruction with no destinations.
-    - `Call(fib)(_6, ) -> [bb6];` - a call instruction with a single destination. This section is prepared for panic handling.
+The borrow-checker IR (BIR) is a three-address code representation, designed to be very close to a subset of rustc's MIR.
+Same as MIR, it represents the body of a single function (or other function-like item, e.g. a closure),
+since borrow-checking is performed on each function separately. It ignores particular operations and merges them into a few abstract operations, that
+only focus on the flow of data.
 
-## BIR Structure
+The BIR of a single function composes of basic metadata about the function (like arguments, return type, explicit lifetimes, etc.), a list of basic
+blocks, and a list of places.
 
-BIR structure is defined in `gcc/rust/checks/errors/borrowck/rust-bir.h`. It is heavily inspired by rustc's MIR. The main difference is that BIR
-drastically reduces the amount of information carried to only borrow-checking relevant information.
-
-As borrow-checking is performed on each function independently, BIR represents a single function (`struct Function`). A `Function` consists of a list
-of basic blocks, list of arguments (for dump only) and place database, which keeps track of locals.
-
-### Basic Blocks
-
-A basic block is identified by its index in the function's basic block list.
-It contains a list of BIR statements and a list of successor
+A basic block is identified by its index in the function's basic block list. It contains a list of BIR statements and a list of successor
 basic block indices in CFG.
-
-### BIR Statements
-
-BIR statements are of three categories:
-
-- An assignment of an expression to a local (place).
-- A control flow operation (switch, return).
-- A special statement (not executable), which carries additional information for borrow-checking (`StorageDead`, `StorageLive`).
-
-#### Expressions
+BIR statements are of three categories: An assignment of an expression to a local (place), a control flow operation (switch, return), or a special
+statement (not executable), which carries additional information for borrow-checking (explicit type annotations, information about variable scope,
+etc.).
 
 Expressions represent the executable parts of the rust code. Many different Rust contracts are represented by a single expression, as only data (and
 lifetime) flow needs to be tracked.
-
-- `InitializerExpr` represents any kind of struct initialization. It can be either explicit (struct expression) or implicit (range expression,
-  e.g. `0..=5`).
-- `Operator<ARITY>` represents any kind of operation, except the following, where special information is needed either for borrow-checking or for
-  better debugging.
-- `BorrowExpr` represents a borrow operation.
-- `AssignmentExpr` holds a place for an assignment statement (i.e., no operation is done on the place, it is just assigned).
-- `CallExpr` represents a function call.
-    - For functions, the callable is represented by a constant place (see below). (E.i. all calls use the same constant place.)
-    - For closures and function pointers, the callable is represented by a (non-constant) place.
+Some expressions are differentiated to allow for a better debugging experience.
 
 ### Places
-
-Places are defined in `gcc/rust/checks/errors/borrowck/rust-bir-place.h`.
 
 Places represent locals (variables), their field, and constants. They are identified by their index (`PlaceId`) in the function's place database. For
 better dump correspondence to MIR, constants use a different index range.
@@ -402,6 +429,30 @@ Variables are identified by `AST` `NodeId`. Fields indexes are taken from `TyTy`
 
 Each place holds indices to its next relatives (in the path tree), `TyTy` type, lifetime and information whether the type can be copies or it needs to
 be moved. Not that unlike rustc, we copy any time we can (for simplicity), while rustc prefers to move if possible (only a single copy is held).
+
+The following graphics illustrates the while structure of BIR:
+
+- `BIR Function`
+    - basic block list
+        - basic block
+            - `Statement`
+                - `Assignment`
+                    - `InitializerExpr`
+                    - `Operator<ARITY>`
+                    - `BorrowExpr`
+                    - `AssignmentExpr` (copy)
+                    - `CallExpr`
+                - `Switch`
+                - `Goto`
+                - `Return`
+                - `StorageLive` (start of variable scope)
+                - `StorageDead` (end of variable scope)
+                - `UserTypeAsscription` (explicit type annotation)
+    - place database
+    - arguments
+    - return type
+    - universal lifetimes
+    - universal lifetime constraints
 
 ## Generic types
 
