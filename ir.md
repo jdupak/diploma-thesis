@@ -1,28 +1,217 @@
-# Structure
+# Introduction
 
-## Borrow-checking
+The first chapter introduces the problem of borrow-checking and give a brief overview of borrow-cher development in `rustc`,
+which led to the Polonius project, which is utilized by this work.
+The second chapter describes the Polonius engine and its API.
+The third chapter compares the internal representations
+of `rustc` and `gccrs` to show the challenges of adapting the rustc borrow-checker design to gccrs.
+The next chapter explains the design of the gccrs borrow-checker created as part of this work.
+It maps the experiments leading to the current design, describes the new intermediate representation and its usage in the analysis.
+Later sections of the chapter describe other modification of the compiler necessary to support borrow-checking, and the design of error reporting.
+The final chapter elaborates on the results, current state of the implementations and known missing features and limitations.
+Since this work had an experimental nature, it focused on exploring the most aspects of the problem, rather than on the completeness of the solution.
+Therefore, the final chapter should lead the future work, extending this experimental work into a production-ready solution.
 
-### Lexical borrow-checking
+# The Problem of Borrow-Checking
 
-### Non-lexical borrow-checking
+This section introduces borrow-checking and briefly describes itd development in Rust. First, simple lexical borrow-checking is described.
+Then, the more complex flow-sensitive borrow-checking is introduced.
+Finally, the Polonius analysis engine is described.
+Since this work utilizes the Polonius engine, it will be described in more detail in the next section.
 
-### Polonius
+## Basic Terminology
 
-## IR comparison
+## ?
 
-## Gccrs borrow-checker design
+Common programming language implementations typically fall into two categories, based on how they manage memory with dynamic storage duration[^bc1].
+Languages like C use manual memory management, where the programmer is responsible for allocating and freeing memory explicitly.
+Higher-level languages like Java or Python use automatic memory management, where the memory is managed by a garbage collector.
+Since the C approach is extremely error-prone, later languages like C++ and Zig provide tools to make the deallocation of memory more implicit.
+For simple cases, they tie the deallocation to destruction of other objects (RAII, smart pointers, defer statements).
+Unlike with stack-based allocation, this relationship (called ownership) can be transferred dynamically between objects.
+For more complex cases,
+when a there is no single object that we can tie the deallocation to
+(that means, there are multiple object and the deallocation has to be tied to to destruction of the last object),
+they opt in for automatic memory management (reference counting).
+Those approaches improve the situation, there are still two problems remaining.
+First, those bounds can be created incorrectly, especially in cases where the ownership of the memory is transferred between different objects.
+Especially, when two systems with different memory management tools are interfaced[^bc2].
+Second, when the ownership is not transfered, but a copy of the pointer is used teporarily (borrowed),
+assuming, that the owning object will exist for the whole time this copy is used.
+This assumption is often wrong.
 
-### BIR
+The Rust language build on the RAII approach, however it adds a build-in static analysis tool,
+called the borrow-checker, to make sure that the mentioned mistakes do not happen.
+To make such analysis feasible, Rust only allows a conservative subset of operations, for which the analysis is feasible.
+Furthermore, Rust adds limitations to make the memory use safe even during multithreading execution.
+Bacause the restrictions are very strict and they would severely limit the language,
+Rust provides a tool to lift some of those restrictions in clearly denoted unsafe areas,
+where the responsibility of the memory invariants falls to the programmer.
 
-### BIR building
+The key idea is that Rust strictly (within the type system) differentiates the two problematic cases: ownership transfers and borrows.
+Unlike C++, Rust does not allow objects to store a reference to itself, simplify the ownership transfer semantics (move), to just a bitwise copy.
+For borrows, Rust uses static analysis,
+to ensure that the lifetime of the borrowed object is longer than the lifetime of the borrow (thus avoiding dangling pointers).
+Since a whole program analysis would be very expensive,
+Rust performs the analysis only for a single function, and forces the programmer,
+to formally describe invariants of reference lifetimes on the function boundary.
+The invariants are checked inside the functions and assumed outside of the function, resulting in a safe program.
+Particularly, Rust requires the programmer to conservatively describe the relationships of lifetimes of all objects that pass the function boundary.
+This is achieved using a so-called lifetime annotations.
+The programmer can think about a lifetime annotation as a symbol for some set of regions in the program, where the reference is alive (safe to
+dereference).
 
-### TyTy Generic types
+Lets consider the following example: We have a vector like structure (a dynamic array) and we want to store references to integers as it elements.
+We need to make sure, that as long as the vector exists, all references are valid, however we don't want the vector to own the integers.
+First we instroduce a lifetime parameter `'a` which represents all the regions where the vector itself is alive.
+This parameter will be substituted at a particular use site with a concrete lifetime.
 
-#### Variance analysys
+```rust
+struct Vec<'a> { ... }
+```
 
-### BIR fact collection and checking
+Then for the add method, we introduce a lifetime parameter `'b` which represents all the regions where the reference is alive.
+This parameter is substituted with a concrete lifetime of each reference, when the method is invoked.
+Finally, we will require that the method can only be used with lifetimes,
+for which we can guarantee that `'b` is a subset of `'a` (in terms of a part of program).
 
-# IR
+```rust
+
+impl<'a> Vec<'a> {
+    fn add<'b> where 'a: 'b (&mut self, x: &'b i32) { ... }
+}
+```
+
+## The Evolution of Borrow-Checking in rustc
+
+This section describes how the analysis evolved over time, rejecting less memory-safe programs.
+Starting with lexical (scope-based analysis), followed by first non-lexical (CFG-based) analysis, which is being extended by the Polonius project.  
+This section strongly builds upon the RFC 2094,
+which introduced the non-lexical borrow-checking to Rust, and examples from that RFC are presented here.
+
+The simplest variant of borrow-checker is bases on stack variable scopes.
+A reference is valid from the point in the program (here in terms of statements and expression)
+where is is created until the end of the current scope.
+To simplify the common cases, this approach can be extended with special cases.
+For example, when a reference is created in function parameters, it is valid until the end of the function.
+
+```rust
+{
+    let mut data = vec!['a', 'b', 'c']; // --+ 'scope
+    capitalize(&mut data[..]);          //   |
+//  ^~~~~~~~~~~~~~~~~~~~~~~~~ 'lifetime //   |
+    data.push('d');                     //   |
+    data.push('e');                     //   |
+    data.push('f');                     //   |
+} // <---------------------------------------+
+```
+
+[//]: # (cite the rfc)
+
+However, a very common modification might cause the program to be rejected.
+
+```rust
+{
+    let mut data = vec!['a', 'b', 'c'];
+    let slice = &mut data[..]; // <-+ 'lifetime
+    capitalize(slice);         //   |
+    data.push('d'); // ERROR!  //   |
+    data.push('e'); // ERROR!  //   |
+    data.push('f'); // ERROR!  //   |
+} // <------------------------------+
+```
+
+Now there is no simple way to say, when the lifetime of the reference should end, to prove that his program is safe from its syntactic structure.
+The code above can be simply fixed by explicitly specifying where the lifetime should end.
+However this clutters the code and it cannot be used for more advanced cases.
+
+```rust
+{
+    let mut data = vec!['a', 'b', 'c'];
+    {
+        let slice = &mut data[..]; // <-+ 'lifetime
+        capitalize(slice);         //   |
+    } // <------------------------------+
+    data.push('d'); // OK
+    data.push('e'); // OK
+    data.push('f'); // OK
+}
+```
+
+One of those more advanced cases happens, when lifetimes are not symetric in conditional branches.
+A typical case is when a condition check the presence of a value.
+In the posive brach, we are holding a reference to the value, but in the negative branch, we do not.
+Therefore it is save to create a new reference in the negative branch.
+
+```rust
+    let mut map = ...;
+    let key = ...;
+    match map.get_mut(&key) { // -------------+ 'lifetime
+        Some(value) => process(value),     // |
+        None => {                          // |
+            map.insert(key, V::default()); // |
+            //  ^~~~~~ ERROR.              // |
+        }                                  // |
+    } // <------------------------------------+
+```
+
+For more examples, see the RFC 2094, however the provided examples should be sufficient to demonstrate,
+that analysing the program on a control flow graph (CFG) instead of the syntactic structure (AST) allows the borrow-checker to verify much more safe
+programs.
+
+The above analysis thinks about lifetimes as regions (set of points in CFG), where the reference is valid.
+The goal of the analysis is to find the smallest regions, such that the reference is not required to be valid outside of those regions.
+The smaller the regions, the more references can coexist at the same time, allowing more programs to be accepted.
+
+The next generation of borrow-checking in Rust is based on the Polonius analysis engine.
+Polonius is an extension of NLL (non-lexical lifetimes)
+which is capable of proving move programs to be safe by using a different interpretation of lifetimes.
+
+The following code cannot be handled by NLL, but it can be handled by Polonius. The problem here is, that everything tied to external lifetimes (here
+`'a`) has to be valid for the whole function.
+Since `v` is returned, it has to to outlive the lifetime `'a`.
+Hovewer, the lifetime of `v` is bound to the lifetime of the reference to the hashmap it is stored in.
+Forcing `map` to be borrowed (trnasitively) for at least the whole function.
+That includes the `map.insert` call, which needs to borrow the hashmap itself.
+Resulting in an error.
+
+```rust
+fn get_or_insert<'a>(
+    map: &'a mut HashMap<u32, String>,
+) -> &'a String {
+    match HashMap::get(&*map, &22) {
+        Some(v) => v,
+        None => {
+            map.insert(22, String::from("hi"));
+            &map[&22]
+        }
+    }
+}
+```
+
+However, we can clearly see, that no variable available in the `None` branch actually uses the reference to the hashmap. This is where Polonius can
+help.
+
+Instead of starting with references and figuring out where they need to be valid, Polonius goes in the other direction and tracks,
+what references need to be valid at each point in the program.
+As we have determined in the example above, there is no preexisting reference the `map` in the `None` branch.
+
+It is important to note, that only internal computations inside the compiler are changed by this.
+This change does not affect the language semantics.
+It only lifts some limitations of the compiler.
+
+Another significant contribution of the Polonius project is the fact that it replaces many handwritten checks with formal logical rules.
+
+[^bc1]: The term dynamic memory is used to refer to memory with dynamic storage duration (unknown at compile time), as opposed to memory with static
+duration (whole program) and memory bound to a function call (automatic storage duration).
+
+[^bc2]: An interface between a C++ application with STL based memory management and the Qt GUI framework, where all Qt API methods take raw
+pointers[^bc3]. Some of those methods assume that the ownership is transferred and some of them do not. Those methods can only be differentiated using
+the documentation.
+
+[^bc3]: As opposed to smart pointers.
+
+# Comparison of Internal Representations
 
 Building a borrow-checker consists of two main parts.
 First, we need to extract information about the program.
@@ -45,9 +234,9 @@ This IR is the interface between front-ends and the compiler platform (the middl
 transforming its AST into the LLVM IR.
 The LLVM IR is stable and strictly separated from the front-end.
 
-![LLVM IR CFG (Compiler Explorer)](./llvm-ir-cfg-example.svg)
+![LLVM IR CFG (Compiler Explorer)](llvm-ir-cfg-example.svg)
 
-[//]: # (TODO: picture)
+[//]: # "TODO: picture"
 
 GCC, on the other hand, interfaces with the front-ends on a tree-based representation called the
 GENERIC [#](https://gcc.gnu.org/onlinedocs/gccint/GENERIC.html).
@@ -264,11 +453,12 @@ This requires us to match the required facts, which are specific to Rust semanti
 We need to distinguish between pointers (in unsafe Rust) and references.
 Pointer is not subject to borrow-checking, but references are.
 Furthermore, we need to distinguish between mutable and immutable references, since they have different rules, essential for borrow-checking
-[^](The key rule of borrow-checking is the for a single borrowed variable,
-there can only be a single mutable borrow, or only immutable borrows valid at each point of the CFG.).
+[^afcp1].
 Each type has to carry information about lifetimes it contains and their variances (described later in this chaper).
 For explicit user type annotation, we need to store the explicit lifetime parameters.
 
+[^afcp1]: The key rule of borrow-checking is the for a single borrowed variable, there can only be a single mutable borrow, or only immutable borrows
+valid at each point of the CFG.
 The only IR in GCC what contains the CFG information is GIMPLE; however, under normal circumstances GIMPLE is language agnostic.
 It is possible to annotate the GIMPLE statements with language specific information,
 using special statements, which would have to be generated from special information that would need to be added GENERIC.
@@ -362,8 +552,10 @@ In function pointers, lifetimes can be universally quantified (meaning that the 
 In function definitions lifetimes can be elided when all references have the same lifetime.
 In function bodies, lifetimes can be bound to the lifetime parameters of the function, or they can be omitted,
 in which case they are inferred
-[^](At least Rust semantics thinks about it that way. In reality, the compiler only checks, that there exists some lifetime that could be used in that
-position, by collecting constraints that would apply to such lifetime abd passing them to the borrow-checker.).
+[^bp1].
+
+[^bp1]: At least Rust semantics thinks about it that way. In reality, the compiler only checks, that there exists some lifetime that could be used in
+that position, by collecting constraints that would apply to such lifetime abd passing them to the borrow-checker.
 
 ## Borrow-checker IR Design
 
@@ -452,53 +644,134 @@ The following graphic illustrates the while structure of BIR:
     - basic block list
         - basic block
             - `Statement`
-                - `Assignment`
-                    - `InitializerExpr`
-                    - `Operator<ARITY>`
-                    - `BorrowExpr`
-                    - `AssignmentExpr` (copy)
-                    - `CallExpr`
-                - `Switch`
-                - `Goto`
-                - `Return`
-                - `StorageLive` (start of variable scope)
-                - `StorageDead` (end of variable scope)
-                - `UserTypeAsscription` (explicit type annotation)
     - place database
     - arguments
     - return type
     - universal lifetimes
     - universal lifetime constraints
 
+- `Statement`
+    - `Assignment`
+        - `InitializerExpr`
+        - `Operator<ARITY>`
+        - `BorrowExpr`
+        - `AssignmentExpr` (copy)
+        - `CallExpr`
+    - `Switch`
+    - `Goto`
+    - `Return`
+    - `StorageLive` (start of variable scope)
+    - `StorageDead` (end of variable scope)
+    - `UserTypeAsscription` (explicit type annotation)
+
 ## BIR Building
 
 The BIR is built by visiting the HIR tree of the function.
-There are specialized visitors for expressions and statements, pattern, and a top level vistor that handles
+There are specialized visitors for expressions and statements, pattern, and a top level visitor that handles function header (arguments, return,
+lifetimes, etc.).
+Whenever a new place created in the compilation database, a list of fresh regions
+[^](In this text,
+I use the term lifetime for the syntactic object in the code and region for the semantic object in the analysis. It is called a region,
+because it represents an enumerated set of points in the control flow graph (CFG). At this points the set is not yet known. It is the main task of the
+borrow-checker analysis engine to compute the set of points for each region.) is created for it.
+At this point, we need to figure out the number of lifetimes mentioned in a type.
+For basic types, this is achieved by traversing the type and counting the number of lifetime parameters.
+For generic types, the inner structure is ignored and only the lifetime and type parameters are considered.
+Note that the type parameters can be generic themselves, which creates a structure known as higher-kinded lifetimes.
+To simplify the type traversing code, this counting is performed (as a side product) during the variance analysis (explained bellow).
+BIR builders are not responsible for any type transformations along the BIR code.
+All types are independently queried from HIR.
 
-## Generic types
+> Example: For a BIR code that reads a field from a variable, the type of not computed from the variable, rather it is queried from the HIR for both
+> the variable and the field.
 
-Generic types impose some additional changes to the borrow-checker.
-Generic types are generic over both types and lifetimes (and constants, but that fact is not important for the borrow-checker).
-Types substituted for type parameters can again be generic, creating a structure known as higher-kinded lifetimes.
-The Rust language subtyping rules allow types with different lifetimes to be coerced to each other.
-This coercion has to follow the variance rules.
-The lifetimes can be substituted in different contexts, leading a different
+BIR building itself is fairly straightforward.
+However, to produce code more similar to rustc's MIR, some extra handling was added.
+Namely, instead of eagerly assigning computed expressions to temporaries, it is checked whether a destination place was not provided by the caller.
+This removes some of the `_10 = _11` statements from the BIR dump.
 
-### Rust Language Subtyping Rules
+> This handling was especially important when testing the initial BIR builder, since it makes the dump more similar to the MIR dump and therefore
+> easier for manual comparison.
 
-The Rust language subtyping rules are defined in the [the reference](https://doc.rust-lang.org/reference/subtyping.html).
-Unlike other languages, which are based on the OOP principles,
-Rust is very explicit about type conversions and therefore leaving a very little space for subtyping. "Subtyping is restricted to two cases: variance
-with respect to lifetimes and between types with higher ranked lifetimes.".
+## BIR Fact Collection and Checking
 
-### Variance analysis
+The BIR fact collection extracts the Polonius facts from the BIR and performs additional checks.
+Polonius is for checking that lifetime constraints, moves and conflicts between borrows.
+For lifetimes, it checks that the constraints are satisfied and that all required constraints are present in the program.
+For moves, it checks that each place is moved at most once.
+For borrows, it checks that any two conflicting borrows (e.g. two mutable borrows of the same place) are not alive at the same time.
+Sets of conflicting borrows have to be supplied to Polonius manually.
+The borrow-checker itself is responsible to violations that are not control-flow sensitive,
+like modification of immutably borrowed place or move from behind a reference.
 
-Variance analysis is a process of determining the variance of type and lifetime generic parameters.
-"
-F<T> is covariant over T if T being a subtype of U implies that F<T> is a subtype of F<U> (subtyping "passes through")
-F<T> is contravariant over T if T being a subtype of U implies that F<U> is a subtype of F<T>
-F<T> is invariant over T otherwise (no subtyping relation can be derived)
-"
+The fact collection is performed in two phases.
+First, static facts are collected from the place database.
+Those include copying of universal region constraints (contraints coresponding to lifetime parameters of the function),
+and collected facts from the place database.
+Polonius needs to know, which places correspond to variables and which form paths (see definition bellow).
+Furthermore, it needs to sanitize fresh regions of places,
+that are related (e.g. a field and a parent variable), by adding appropriate constraints between them.
+Relations of region depend on variance of the region within the type. (See Variance Analysis bellow.)
+
+```
+Path = Variable
+     | Path "." Field // field access
+     | Path "[" "]"   // index
+     | "*" Path
+```
+
+> Formal definiton of paths from the Polonius book.
+
+In the second phase, the BIR is traversed along the CFG and the dynamic facts are collected.
+For each statement, CFG nodes are added to Polonius-specific representation of the CFG.
+For each statement, two CFG nodes are added.
+This is needed to correctly model the parts of semantics,
+where the statement takes effect after the statement is executed,
+for each statement, there is a CFG node corresponding to the state of the program before the statement is executed,
+and after the statement is executed.
+For each statement and (if present) its expression, Polonius facts are collected.
+Those include generic facts related to read and write operations, as well as facts specific to borrows and function calls.
+For function, we need to instantiate fresh regions for the function's lifetime parameters, that need to be correctly bound together.
+
+### Subtyping and Variance
+
+In the basic interpretation of Rust languages semantics (one used by programmers to reason about their code, not the one used by the compiler),
+lifetimes are parts of types and are always present.
+If a lifetime is not mentioned in the program explicitly, it is infered the same way as when a part of type is infered
+(e.g. `let a = (_, i32) = (true, 5);` completes the type to `(bool, i32)`)[^](Note,
+that is actually imposible to write those lifetimes.
+In Rust program all explicit lifetime anotations are so called universal
+and correspond to any borrow that happened outside of the function and therefore it is alive for the whole body of the function.
+Explicit lifetime annotations corepoding to regions spanning only a part of the function body would be pointless,
+since those regions are precisely determined by the code itself and there is nothing to further specify.
+Explicit lifetimes annotation are only used to represent constrains following from code that we cannot see during borrow-checking.).
+Lets make an example.
+In the example we need to infer the type of x, such that it is a subtype of both `&'a T` and `&'b T`.
+We need to make sure,
+that if we further use x, that is is safe with regard to all loans[^](Loan is the result of borrow operation.) that it can contain (here `a` or `b`).
+
+```rust
+let mut x;
+if (b) {
+    x = a; // a: &'a T
+} else {
+    x = b; // b: &'b T
+}
+```
+
+In rust, unlike in dynamic languages like Java,
+the only subtyping relation other than identity is caused by lifetimes[^](During the type inference computation,
+there can also by subtyping relation with a general kind of type like <integer>, which is mostly used for not annotated literals, where we know it is
+some kind of integer, but we don't yet know which one).
+2 regions (corresponding to lifetimes) can be either unrelated, subset of each other (in terms of a set of CFG nodes) (denoted `'a: 'b`),
+or equal (typically a result of `'a: 'b` and `'b: 'a`).
+The dependency of subtyping on inner parameter is called variance.
+
+> `F<T>` is covariant over `T` if `T` being a subtype of `U` implies that `F<T>` is a subtype of `F<U>` (subtyping "passes through")
+> `F<T>` is contravariant over `T` if `T` being a subtype of `U` implies that `F<U>` is a subtype of F<T>
+> `F<T>` is invariant over `T` otherwise (no subtyping relation can be derived)
+
+> Definition from Rust reference.
 
 Let us see what that means on example specific to lifetimes.
 For a simple reference type `&'a T`, the lifetime parameter `'a` is covariant. That's means that if we have a reference `&'a T` and we can coerce it
@@ -532,18 +805,50 @@ Let us have a function `fn foo<'a>(x: &'a T) -> &'a T`.
 The return type require the function to be covariant over `'a`, while the parameter requires it to be contravariant.
 This is called *invariance*.
 
-Rust uses 'definition-site variance'.
-That means that the variance is computed solely from the definition of the type, not from its usage.
+For non-generic types, its variance immediately follows from the type definition. For generic types, the sitation is more complex.
 
-Both rustc and gccrs variance analysis is based on Section 4 of the paper "Taming the Wildcards: Combining Definition- and
+### Variance of Generic Types
+
+There are multiple approaches to variance of generic types.
+It can be either derived from the usage of the type, or from its definition.
+For non-generic types, use-site variance is used.
+[^](For `&'a T`, if the reference is used as a function parameter, it is contravariant, if it is used as a return type, it is covariant.)
+For generic types Rust uses definition-site variance.
+That means that the variance is computed solely from the definition of the type (effectively, usage constraint to the body of the type),
+not from its usage (inside functions).
+The sitauation gets complicated when a generic type is used inside another generic type, possibly even in a recursive fashion.
+In that situation, the variance has to be computed using a fix-point algorithm (further refered to as "variance analysis).
+
+#### Variance Analysis
+
+Both rustc and gccrs variance analysis implementation is based on Section 4 of the paper "Taming the Wildcards: Combining Definition- and
 Use-Site Variance"
-published in PLDI'11 and written by Altidor et al. Notation from the paper is followed in documentation of both compilers and in this text.
-The paper primarily focuses on complex type variance, like in the case of Java,
-but it introduces a simple calculus, which nicely works with higher-kinded lifetimes.
+published in PLDI'11 and written by Altidor et al. Notation from the paper is followed in documentation of both compilers,
+their documentations and in this text.
+The paper primarily focuses on complex type variance, like in the case of Java, but it introduces an effective formal calculus, which nicely works
+with higher-kinded lifetimes.
 
 The exact rules are best understood from the paper and from the code itself.
-Therefore, here I will only give a simple overview.
-Lets assume a generic structs.
+Therefore, here I will only provide a simple overview.
+
+The analysis uses an iterative fixed-point computation, where variables form a semi-lattice with an additional binary operation.
+A single variable corresponds to a single lifetime or type parameter.
+Variables are initialized as bivariant.
+
+Each type is traversed by a visitor, with current variance of the visited expression as an input.
+Each member of a type is in covariant position.
+Each member of a function parameter is in contravariant position.
+The return type is in covariant position.
+Generic argument position is determined by the variance of the generic parameter (a variable of this computation).
+Variance of the current node within the type is computed by the `transform` function,
+taking the variance of the parent node and the variance based on the position of the current node, and building and expression.
+When a lifetime or type parameter is encountered, then,
+if the current variance expression is constant, the variable is updated to the new variance using join operation with the current value.
+For expression containing at least one variable, the expression is added to the list of constraints.
+Here the fixed-point computation requirement arises.
+
+Once all types in crate are processed, the constraints are solved using a fixed-point computation.
+Note, that the current crate can use generic types from other crates and therefore it has to export/load the variance of public types.
 
 ```rust
 struct Foo<'a, 'b, T> {
@@ -552,3 +857,75 @@ struct Foo<'a, 'b, T> {
 }
 ```
 
+- Struct foo has 3 generic parameters, lading to 3 variables. `f0=o`, `f1=o` and `f2=o`.
+- `x` is processed first, in covariant position.
+    - `&'a T` is in covariant position, therefore variables are updated to `f0=+` and `f2=+`.
+- `y` is processed second, in covariant position.
+    - `Bar<T>` is in covariant position.
+        - `T` is inside a generic argument, therefore its position is computed as a term `transform(+, b0)`.
+            - New constant `f2 = join(f2, transform(+, b0))` is added.
+- All types are processed. Let us assume that `Bar` is an external type with variances `[-]`  Now a fixed-point computation is performed.
+    - Iteration 1:
+        - Current values are `f0=+`, `f1=o` and `f2=+`
+        - Processing constraint `f2 = join(f2, transform(+, b0))`
+        - `transform(+, b0)` where `b0=-` yields `-`
+        - `join(+, -)` yields `*`
+        - `f2` is updated, therefore, another iteration is needed.
+    - Iteration 2:
+        - Current values are `f0=+`, `f1=o` and `f2=*`
+        - Processing constraint `f2 = join(f2, transform(+, b0))`
+        - `transform(+, b0)` where `b0=-` yields `-`
+        - `join(*, -)` yields `*`
+        - `f2` is not updated, therefore, the computation is finished.
+- The final variance is `f0=+`, `f1=o` and `f2=*`:
+    - `f0` is evident,
+    - `f1` stayed bivariant, because it was not mentioned in the type,
+    - `f2` is invariant, because it is used in both covariant and contravariant position.
+
+## Representation of Lifetimes in TyTy
+
+## Error Reporting
+
+As each function is analysed separetedly, the complier can easily report which functions are in violation of the rules.
+Currently, only the kind of violation is communitated from the Polonius engine to the compiler.
+More detailed reporting is an issue for future work.
+
+There are tree possible ways the more detailed reporting could be implemented.
+
+The first is to pass all the violations back to the compiler to be processed as a return value of the Polonius FFI invocation.
+This variant is provides a simple separation of roles between the compiler and the analysis engine,
+hovewer it might be dificult to implement correctly with regards to memory owneship around the FFI boundary,
+since Polonius would need to allocate dynamically sized memory to pass the result.
+Polonius would need to implement a special API to release the memory.
+
+The second variant is to pass a callback function for reporting of the found errors to the Polonius engine, which would be called for each violation.
+Hovewer, Polonius only has information in terms of enumerated nodes of the control flow graph.
+Therefore a pointer to an instance of the borrowchecker would need to be passed to the Polonius engine,
+to be used in combination with the callback to resolve the nodes to the actual code.
+The separation of roles, where Polonius and Polonius FFI are used just as external computation engine, is broken.
+
+A compromise between these variants would be to provide Polonius with callback functions,
+which would send the violations to the compiler one by one, leaving the allocation on the compiler side only.
+
+Moreover, the borrow-checker currently does not store information, to map the nodes back to source code locations.
+This issue is clearly technical only, and the functionality can be added easily with local changes only.
+Since this work has experimental character, work on the analysis itself was prioritized over more detailed error reporting.
+
+The final stage of the borrow-checker development would be to implement heuristics to guess the sources of the error and suggest possible fixes.
+
+# Current State
+
+## Parsing
+
+Parsing handles both explicit and implicit lifetimes correctly.
+
+Parsing of special lifetimes (`'static` and `'_`) was fixed. Handling of implicit lifetimes was added.
+
+## AST to HIR Lowering
+
+## Type Checking (TyTy Representation)
+
+Resolution of named lifetimes to their binding clauses was added.
+TyTy types were refactored from usage of named lifetimes to resolved regions.
+Previously completely missing handling of lifetimes in generic types and representation of regions inside generic types was added.
+Also a mechanism to map original types to substituted ones, preserving information about parameter position was added.
