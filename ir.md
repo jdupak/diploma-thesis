@@ -1,27 +1,26 @@
+---
+title: Memory Safety Analysis in Rust GCC
+author: Jakub Dupak
+---
+
 # Introduction
 
-The first chapter introduces the problem of borrow-checking and give a brief overview of borrow-cher development in `rustc`,
-which led to the Polonius project, which is utilized by this work.
+The first chapter introduces the problem of borrow-checking and gives a brief overview of the borrow-checker development in the `rustc` compiler, up to the Polonius project, which is utilized by this work.
 The second chapter describes the Polonius engine and its API.
-The third chapter compares the internal representations
-of `rustc` and `gccrs` to show the challenges of adapting the rustc borrow-checker design to gccrs.
-The next chapter explains the design of the gccrs borrow-checker created as part of this work.
+The third chapter compares the internal representations of `rustc` and `gccrs` to show the challenges of adapting the `rustc` borrow-checker design to `gccrs`.
+The next chapter explains the design of the `gccrs` borrow-checker implemented as part of this work.
 It maps the experiments leading to the current design, describes the new intermediate representation and its usage in the analysis.
-Later sections of the chapter describe other modification of the compiler necessary to support borrow-checking, and the design of error reporting.
+Later sections of the chapter describe other modification of the rest of the compiler necessary to support borrow-checking, and the design of error reporting.
 The final chapter elaborates on the results, current state of the implementations and known missing features and limitations.
 Since this work had an experimental nature, it focused on exploring the most aspects of the problem, rather than on the completeness of the solution.
 Therefore, the final chapter should lead the future work, extending this experimental work into a production-ready solution.
 
 # The Problem of Borrow-Checking
 
-This section introduces borrow-checking and briefly describes itd development in Rust. First, simple lexical borrow-checking is described.
+This section introduces borrow-checking and briefly describes its development in Rust. First, simple lexical borrow-checking is described.
 Then, the more complex flow-sensitive borrow-checking is introduced.
 Finally, the Polonius analysis engine is described.
-Since this work utilizes the Polonius engine, it will be described in more detail in the next section.
-
-## Basic Terminology
-
-## ?
+Since this work utilizes the Polonius engine, it will be described in more detail in the following chapter.
 
 Common programming language implementations typically fall into two categories, based on how they manage memory with dynamic storage duration[^bc1].
 Languages like C use manual memory management, where the programmer is responsible for allocating and freeing memory explicitly.
@@ -211,6 +210,25 @@ the documentation.
 
 [^bc3]: As opposed to smart pointers.
 
+# Polonius
+
+The Polonius engine was created by Niko Matsakis[^pol1] as a next generation of control-flow sensitive borrow-checker-analysis engine. It was designed an independent library that can be used both by the `rustc` compiler and different research projects, which makes it suitable for usage in `gccrs`. Polonius interfaces with the compiler by passing a struct of vectors[^pol2] of facts, where each fact is represented by a tuple of integers (or types convertible to integers).
+
+The engine first preprocesses the input facts. This includes a computation of transitive closures of the facts, computing there initialization and deinitializations happens over the CFG. Then it checks for move error, i.e. when ownership of some object is transferred more than once. In the next step the liveliness of variables is computed. What that means is that the engines finds the smallest sets of CFG nodes, where variable contents have to be valid, because it may be used later. 
+
+## Input Facts
+
+- Control-flow-graph
+  - **cfg_edge(point1, point2)**: describes the CFG itself.
+- Path facts, describe the relationships of places.
+  - **child_path**
+  - **path_is_var**
+  - **path_assigned_at_base**
+  - **path_moved_at_base**
+
+[^pol1]: [https://github.com/nikomatsakis](https://github.com/nikomatsakis)
+[^pol2]: "A contiguous growable array type" from Rust standard library. ([https://doc.rust-lang.org/std/vec/struct.Vec.html](https://doc.rust-lang.org/std/vec/struct.Vec.html))
+
 # Comparison of Internal Representations
 
 Building a borrow-checker consists of two main parts.
@@ -220,6 +238,8 @@ We will call that information *facts*.
 Second, we need to use those facts to check the program.
 
 To understand how facts are extracted in gccrs and rustc, we need to understand how programs are represented in each compiler.
+
+![](./pipeline.svg)
 
 ## GCC vs LLVM
 
@@ -235,8 +255,6 @@ transforming its AST into the LLVM IR.
 The LLVM IR is stable and strictly separated from the front-end.
 
 ![LLVM IR CFG (Compiler Explorer)](llvm-ir-cfg-example.svg)
-
-[//]: # "TODO: picture"
 
 GCC, on the other hand, interfaces with the front-ends on a tree-based representation called the
 GENERIC [#](https://gcc.gnu.org/onlinedocs/gccint/GENERIC.html).
@@ -915,6 +933,8 @@ The final stage of the borrow-checker development would be to implement heuristi
 
 # Current State
 
+## Kind of Detected Errors
+
 ## Parsing
 
 Parsing handles both explicit and implicit lifetimes correctly.
@@ -929,3 +949,15 @@ Resolution of named lifetimes to their binding clauses was added.
 TyTy types were refactored from usage of named lifetimes to resolved regions.
 Previously completely missing handling of lifetimes in generic types and representation of regions inside generic types was added.
 Also a mechanism to map original types to substituted ones, preserving information about parameter position was added.
+
+## Borrow-checker Scheduling
+
+## BIR Building
+
+### BIR Dump
+
+## BIR Fact Collection
+
+## Polonius FFI
+
+## Error Reporting
