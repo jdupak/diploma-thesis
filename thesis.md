@@ -1,4 +1,4 @@
----
+t---
 title: Memory Safety Analysis in Rust GCC
 author: Jakub Dupak
 ---
