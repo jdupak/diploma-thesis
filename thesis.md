@@ -1,4 +1,4 @@
-t---
+---
 title: Memory Safety Analysis in Rust GCC
 author: Jakub Dupak
 ---
@@ -6,11 +6,12 @@ author: Jakub Dupak
 # Introduction
 
 The first chapter introduces the problem of borrow-checking and gives a brief overview of the borrow-checker development in the `rustc` compiler, up to the Polonius project, which is utilized by this work.
-The second chapter describes the Polonius engine and its API.
-The third chapter compares the internal representations of `rustc` and `gccrs` to show the challenges of adapting the `rustc` borrow-checker design to `gccrs`.
+The second chapter describes the Polonius analysis engine and its API.
+The third chapter compares the internal representations of `rustc` and `gccrs` to hightlight the challenges of adapting the `rustc` borrow-checker design to `gccrs`.
 The next chapter explains the design of the `gccrs` borrow-checker implemented as part of this work.
 It maps the experiments leading to the current design, describes the new intermediate representation and its usage in the analysis.
 Later sections of the chapter describe other modification of the rest of the compiler necessary to support borrow-checking, and the design of error reporting.
+<!-- Mayby only discus error reporting in the final chapter. -->
 The final chapter elaborates on the results, current state of the implementations and known missing features and limitations.
 Since this work had an experimental nature, it focused on exploring the most aspects of the problem, rather than on the completeness of the solution.
 Therefore, the final chapter should lead the future work, extending this experimental work into a production-ready solution.
@@ -18,61 +19,64 @@ Therefore, the final chapter should lead the future work, extending this experim
 # The Problem of Borrow-Checking
 
 This section introduces borrow-checking and briefly describes its development in Rust. First, simple lexical borrow-checking is described.
-Then, the more complex flow-sensitive borrow-checking is introduced.
+Then, the more complex control-flow sensitive borrow-checking is introduced.
 Finally, the Polonius analysis engine is described.
-Since this work utilizes the Polonius engine, it will be described in more detail in the following chapter.
+Since this work utilizes the Polonius engine, it is described in more detail in the following chapter.
 
-Common programming language implementations typically fall into two categories, based on how they manage memory with dynamic storage duration[^bc1].
+Typical programming language implementations fall into two categories, based on how they manage memory with dynamic storage duration[^bc1].
 Languages like C use manual memory management, where the programmer is responsible for allocating and freeing memory explicitly.
 Higher-level languages like Java or Python use automatic memory management, where the memory is managed by a garbage collector.
-Since the C approach is extremely error-prone, later languages like C++ and Zig provide tools to make the deallocation of memory more implicit.
-For simple cases, they tie the deallocation to destruction of other objects (RAII, smart pointers, defer statements).
+Since the C approach is considerably error-prone, later languages like C++ and Zig provide tools to make the deallocation of memory more implicit.
+For simple cases, they tie the deallocation to destruction of other objects (RAII, smart-pointers, defer statements).
 Unlike with stack-based allocation, this relationship (called ownership) can be transferred dynamically between objects.
-For more complex cases,
-when a there is no single object that we can tie the deallocation to
-(that means, there are multiple object and the deallocation has to be tied to to destruction of the last object),
+For more complex cases, when a there is no single object that we can tie the deallocation to
+(that means, there are multiple object and the deallocation has to be linked to destruction of the last one),
 they opt in for automatic memory management (reference counting).
-Those approaches improve the situation, there are still two problems remaining.
-First, those bounds can be created incorrectly, especially in cases where the ownership of the memory is transferred between different objects.
-Especially, when two systems with different memory management tools are interfaced[^bc2].
-Second, when the ownership is not transfered, but a copy of the pointer is used teporarily (borrowed),
-assuming, that the owning object will exist for the whole time this copy is used.
-This assumption is often wrong.
+Those approaches improve the situation considerably. Hovewer, there are two problems remaining.
+First, those bounds can be created incorrectly, mainly in cases where the ownership of the memory is transferred between objects.
+The situation is even worse, when two systems with different memory management tools are interfaced[^bc2].
+Second, when the ownership is not transfered, but a copy of the pointer is used teporarily (we will call this "borrowing"),
+assuming, that the owning object will exist for the whole time this copy in used.
+Such assumption is often wrong and this kind of mistake is often called a "dangling pointer".
 
-The Rust language build on the RAII approach, however it adds a build-in static analysis tool,
-called the borrow-checker, to make sure that the mentioned mistakes do not happen.
-To make such analysis feasible, Rust only allows a conservative subset of operations, for which the analysis is feasible.
-Furthermore, Rust adds limitations to make the memory use safe even during multithreading execution.
-Bacause the restrictions are very strict and they would severely limit the language,
-Rust provides a tool to lift some of those restrictions in clearly denoted unsafe areas,
-where the responsibility of the memory invariants falls to the programmer.
+[^bc1]: The term dynamic memory is used to refer to memory with dynamic storage duration (unknown at compile time), as opposed to memory with static duration (whole program) and memory bound to a function call (automatic storage duration).
 
-The key idea is that Rust strictly (within the type system) differentiates the two problematic cases: ownership transfers and borrows.
-Unlike C++, Rust does not allow objects to store a reference to itself, simplify the ownership transfer semantics (move), to just a bitwise copy.
-For borrows, Rust uses static analysis,
-to ensure that the lifetime of the borrowed object is longer than the lifetime of the borrow (thus avoiding dangling pointers).
-Since a whole program analysis would be very expensive,
-Rust performs the analysis only for a single function, and forces the programmer,
-to formally describe invariants of reference lifetimes on the function boundary.
-The invariants are checked inside the functions and assumed outside of the function, resulting in a safe program.
-Particularly, Rust requires the programmer to conservatively describe the relationships of lifetimes of all objects that pass the function boundary.
+[^bc2]: An interface between a C++ application with STL based memory management and the Qt GUI framework, where all Qt API methods take raw pointers[^bc3]. Some of those methods assume that the ownership is transferred and some of them do not. Those methods can only be differentiated using their documentation.
+
+[^bc3]: As opposed to smart pointers.
+
+The Rust language builds on the RAII approach, however it adds a build-in static analysis,
+called the borrow-checker, to make sure that the above mentioned mistakes cannot happen.
+To make such analysis feasible, Rust only allows a conservative subset of memory-safe operations.
+Furthermore, Rust adds further limitations to ensure the memory use safe even during multithreading execution.
+Because these restrictions are very strict and they would severely limit the language,
+Rust provides a feature to lift some of those restrictions in clearly denoted unsafe areas. There, the responsibility for maintaining the safety invariants falls to the programmer.
+
+<!-- TODO: I am not consistend with terminology and I start to use the Rust one without explaining it. -->
+
+The key idea behind Rust memory safety it to strictly (within the type system) differentiate the two problematic cases: ownership transfers and borrows.
+Unlike C++, Rust does not allow objects to store a reference to itself, simplify the ownership transfer semantics (called "move" in Rust), to just a bitwise copy.
+For borrows, Rust uses static analysis, to ensure that the lifetime of the borrowed object is longer than the lifetime of the borrow (thus avoiding dangling pointers).
+Hovewer, since a whole program analysis would be very expensive, Rust performs the analysis only inside of a single function, and forces the programmer to formally describe the invariants of lifetimes on a single function boundary.
+The invariants are checked inside the function and assumed outside of the function, resulting in a safe program.
 This is achieved using a so-called lifetime annotations.
-The programmer can think about a lifetime annotation as a symbol for some set of regions in the program, where the reference is alive (safe to
-dereference).
+The programmer can think about a lifetime annotation as a symbol for *some*[^bc4] set of parts (lines/expression/CFG nodes) of the program, where the reference is safe to dereference.
 
-Lets consider the following example: We have a vector like structure (a dynamic array) and we want to store references to integers as it elements.
-We need to make sure, that as long as the vector exists, all references are valid, however we don't want the vector to own the integers.
-First we instroduce a lifetime parameter `'a` which represents all the regions where the vector itself is alive.
+[^bc4]: It does not have to be unique. The borrow-checker only makes sure that some such region exists.
+
+Lets consider the following example: We have a vector-like structure (a dynamic array) and we want to store references to integers as it elements.
+We need to make sure, that as long as the vector exists, all references stored in it are valid. However we don't want the vector to own the integers.
+First, we instroduce a lifetime parameter `'a` which represents all the regions where the vector itself is alive.
 This parameter will be substituted at a particular use site with a concrete lifetime.
 
 ```rust
 struct Vec<'a> { ... }
 ```
 
-Then for the add method, we introduce a lifetime parameter `'b` which represents all the regions where the reference is alive.
+Then for the add method, we introduce a lifetime parameter `'b` which restrics the inserted reference.
 This parameter is substituted with a concrete lifetime of each reference, when the method is invoked.
 Finally, we will require that the method can only be used with lifetimes,
-for which we can guarantee that `'b` is a subset of `'a` (in terms of a part of program).
+for which we can guarantee that `'b` is a subset of `'a` (in terms of a parts of program).
 
 ```rust
 
@@ -83,16 +87,15 @@ impl<'a> Vec<'a> {
 
 ## The Evolution of Borrow-Checking in rustc
 
-This section describes how the analysis evolved over time, rejecting less memory-safe programs.
-Starting with lexical (scope-based analysis), followed by first non-lexical (CFG-based) analysis, which is being extended by the Polonius project.  
-This section strongly builds upon the RFC 2094,
-which introduced the non-lexical borrow-checking to Rust, and examples from that RFC are presented here.
+This section describes how the analysis evolved over time, gradually rejecting less memory-safe programs.
+`rustc` started with lexical (scope-based analysis), followed by first non-lexical (CFG-based) analysis, which is being extended by the Polonius project.
+This section strongly builds upon the RFC 2094[@rfc2094nll],
+which introduced the non-lexical borrow-checking to Rus. Examples from that RFC presented in this section.
 
 The simplest variant of borrow-checker is bases on stack variable scopes.
-A reference is valid from the point in the program (here in terms of statements and expression)
-where is is created until the end of the current scope.
-To simplify the common cases, this approach can be extended with special cases.
-For example, when a reference is created in function parameters, it is valid until the end of the function.
+A reference is valid from the point in the program (here in terms of statements and expression) where it is created until the end of the current scope.
+To simplify the common programming patterns, this approach can be extended to handle some special cases.
+For example, when a reference is created in function parameters, it is valid until the end of the function call.
 
 ```rust
 {
@@ -154,9 +157,7 @@ Therefore it is save to create a new reference in the negative branch.
     } // <------------------------------------+
 ```
 
-For more examples, see the RFC 2094, however the provided examples should be sufficient to demonstrate,
-that analysing the program on a control flow graph (CFG) instead of the syntactic structure (AST) allows the borrow-checker to verify much more safe
-programs.
+For more examples, see the RFC 2094[@rfc2094nll], however the provided examples should be sufficient to demonstrate that analysing the program on a control flow graph (CFG) instead of the syntactic structure (AST) allows the borrow-checker to verify much more safe programs.
 
 The above analysis thinks about lifetimes as regions (set of points in CFG), where the reference is valid.
 The goal of the analysis is to find the smallest regions, such that the reference is not required to be valid outside of those regions.
@@ -201,15 +202,6 @@ It only lifts some limitations of the compiler.
 
 Another significant contribution of the Polonius project is the fact that it replaces many handwritten checks with formal logical rules.
 
-[^bc1]: The term dynamic memory is used to refer to memory with dynamic storage duration (unknown at compile time), as opposed to memory with static
-duration (whole program) and memory bound to a function call (automatic storage duration).
-
-[^bc2]: An interface between a C++ application with STL based memory management and the Qt GUI framework, where all Qt API methods take raw
-pointers[^bc3]. Some of those methods assume that the ownership is transferred and some of them do not. Those methods can only be differentiated using
-the documentation.
-
-[^bc3]: As opposed to smart pointers.
-
 # Polonius
 
 The Polonius engine was created by Niko Matsakis[^pol1] as a next generation of control-flow sensitive borrow-checker-analysis engine. It was designed an independent library that can be used both by the `rustc` compiler and different research projects, which makes it suitable for usage in `gccrs`. Polonius interfaces with the compiler by passing a struct of vectors[^pol2] of facts, where each fact is represented by a tuple of integers (or types convertible to integers).
@@ -231,49 +223,46 @@ The engine first preprocesses the input facts. This includes a computation of tr
 
 # Comparison of Internal Representations
 
-Building a borrow-checker consists of two main parts.
-First, we need to extract information about the program.
+The execution of a borrow-checker with external analysis engine consists of two steps.
+First, we need to collect the relevant information about the program.
 We will call that information *facts*.
-(This follows the terminology used by Polonius [link polonius book/facts]().)
-Second, we need to use those facts to check the program.
+(This follows the terminology used by Polonius[@polonius].)
+Second, we need to send those facts to the external engine to process them. The former step will be the focus of this chapter. To be able to collect *facts* about the program, we must first see how the program is represented in the compiler internally. First we will describe the IRs used by `rustc` and then we will compare them with those ised in `gccrs`.
 
-To understand how facts are extracted in gccrs and rustc, we need to understand how programs are represented in each compiler.
+![Comparison of compiler pipelines with focus on internal representations](./pipeline.svg)
 
-![](./pipeline.svg)
+To understand why facts are represented in  the way they are, we first need to see how programs are represented in each compiler platforms.
 
 ## GCC vs LLVM
 
-To understand the differences between gccrs and rustc, we must first explore the differences of the compiler platforms they are built
-on (GCC and LLVM).
-We will only focus on the middle-end of each compiler platform, since the back-end is not relevant to borrow-checking.
+To understand the differences between each of the compilers, we must first explore the differences between the compiler platforms they are built on (GCC and LLVM).
+We will only focus on the middle-end of each platform, since the back-end does not influence the front-end directly.
 
-The core of LLVM is a three-address code (3-AD) [^](Three-address code represents the program as a sequence of statements (we call such sequence a
-*basic block*), connected by control flow instructions, forming a control flow graph (CFG).) representation called the LLVM intermediate
-representation (LLVM IR) [https://llvm.org/docs/Reference.html#llvm-ir].
+The core of LLVM is a three-address code (3-AD) [^comp1] representation, called the LLVM intermediate
+representation (LLVM IR) [@llvm, llvm-ir].
 This IR is the interface between front-ends and the compiler platform (the middle-end and the back-end). Each front-end is responsible for
 transforming its AST into the LLVM IR.
 The LLVM IR is stable and strictly separated from the front-end.
 
-![LLVM IR CFG (Compiler Explorer)](llvm-ir-cfg-example.svg)
+[^comp1]: Three-address code represents the program as a sequence of statements (we call such sequence a *basic block*), connected by control flow instructions, forming a control flow graph (CFG).
+
+![LLVM IR CFG Example (generated by Compiler Explorer)](llvm-ir-cfg-example.svg)
 
 GCC, on the other hand, interfaces with the front-ends on a tree-based representation called the
-GENERIC [#](https://gcc.gnu.org/onlinedocs/gccint/GENERIC.html).
+GENERIC[@gccint, p. 175].
 GENERIC was created generalized form of AST shared by most front-ends.
 GCC provides a set of common tree nodes to describe all the common language constructs in the GENERIC IR.
 Front-ends may define language-specific constructs and provide hooks for their
-handling. [#](gccint:212)[#](https://gcc.gnu.org/onlinedocs/gccint/Language-dependent-trees.html)
-This representation is then transformed into a GIMPLE representation [#](https://gcc.gnu.org/onlinedocs/gccint/GIMPLE.html), which is a mostly[^]("
-GIMPLE that is not fully lowered is
-known as “High GIMPLE” and consists of the IL before the pass pass_lower_cf. High
-GIMPLE contains some container statements like lexical scopes (represented by GIMPLE_
-BIND) and nested expressions (e.g., GIMPLE_TRY), while “Low GIMPLE” exposes all of the
-implicit jumps for control and exception expressions directly in the IL and EH region trees." [#](gccint:225)) 3-AD
+handling. [@gccint, p. 212]
+This representation is then transformed into a GIMPLE representation , which is a mostly[^gcc1] 3-AD
 representation, by breaking down expression into a sequence of statements, introducing temporary variables.
 This transformation is done inside the compiler platform, not in the front-end.
 This approach allows the front-ends to be smaller and shifting more works into the shared part.
 GIMPLE representation does not contain information specific to each front-end (programming language).
 It is only possible to add completely new statements.
-[#](gccint:262) This is possible, because GIMPLE is not a stable interface.
+[@gccint, p. 262] This is possible because GIMPLE is not a stable interface.
+
+[^gcc1]: "GIMPLE that is not fully lowered is known as “High GIMPLE” and consists of the IL before the  `pass_lower_cf`. High GIMPLE contains some container statements like lexical scopes and nested expressions, while “Low GIMPLE” exposes all of the implicit jumps for control and exception expressions directly in the IL and EH region trees." [@gccint, p. 225]
 
 The key takeaway is that rustc has to transform the tree-based representation into a 3-AD representation itself.
 That means that it has access to the control flow graph (CFG) of the program.
@@ -293,7 +282,7 @@ fn foo(x: i32) -> Foo {
 > This very simple code will be used as an example throughout this section.
 
 In the previous section, we have seen that rustc is responsible for transforming the code all the way from the raw text to the LLVM IR.
-Given the high complexity of the Rust language, rustc uses multiple intermediate representations (IR) to simplify the process.
+Given the high complexity of the Rust language, `rustc`` uses multiple intermediate representations (IR) to simplify the process.
 The text is first tokenized and parsed into the abstract syntax tree (AST),
 which is then transformed into the high-level intermediate representation (HIR).
 For transformation into a middle-level intermediate representation (MIR), the HIR is first transformed into a typed HIR (THIR).
@@ -308,7 +297,7 @@ various kinds of loops are transformed to a single infinite loop construct
 (Rust `loop` keyword) and many structures that can perform pattern matching (`if let`, `while let`, `?` operator) are transformed to a `match`
 construct.
 
-```
+```rust
 Fn {
   generics: Generics { ... },
   sig: FnSig {
@@ -338,7 +327,7 @@ Fn {
 
 > This is a textual representation of a small and simplified part of the abstract syntax tree (AST) of the example program.
 
-HIR is the main representation used for most rustc operations [https://rustc-dev-guide.rust-lang.org/hir.html].
+HIR is the main representation used for most rustc operations [@devguide, HIR].
 It combines a simplified version of the AST with additional tables and maps for quick access to information.
 For example, those tables contain information about the types of expressions and statements.
 Those are used for analysis passes, like full (late) resolution and typechecking.
@@ -346,7 +335,7 @@ The typechecking process, which includes both checking the type correctness of t
 langugage constructs.
 [#](https://rustc-dev-guide.rust-lang.org/type-checking.html)
 
-```
+```rust
 #[prelude_import]
 use ::std::prelude::rust_2015::*;
 #[macro_use]
@@ -363,12 +352,14 @@ fn foo(x: i32) -> Foo { Foo(x) }
 The HIR representation can contain many placeholders and "optional" fields that are resolved during the HIR analysis.
 To simplify further processing, parts of HIR that correspond to executable code (e.g. not type definitions) are transformed into THIR
 (Typed High-Level Intermediate Representation) where all the missing informaion (mainly types) must be resolved.
-The reader can think about HIR and THIR in terms of the builder pattern [https://en.wikipedia.org/wiki/Builder_pattern],
+The reader can think about HIR and THIR in terms of the builder pattern[^hir1],
 where HIR provides flexible interface for modification and THIR the final immutable representation
 This does not only involve the data explicitly stored in HIR, but also parts of the program, that are implied from the type system.
 Operator overloading, automatic references and dereferences, etc. are all resolved at this stage.
 
-The final rustc IR that is lowered directly to LLVM IR is the MIR (Mid-level Intermediate Representation).
+[^hir1]: [https://en.wikipedia.org/wiki/Builder_pattern](https://en.wikipedia.org/wiki/Builder_pattern)
+
+The final `rustc` IR that is lowered directly to LLVM IR is the MIR (Mid-level Intermediate Representation).
 We will pay extra attention to MIR because it is the main representation used by the borrow-checker.
 MIR is a three-address code representation, similar to LLVM IR but with Rust specific constructs.
 It consists of basic blocks, which are sequences of statements connected by control flow instructions.
@@ -432,7 +423,7 @@ There is no THIR and MIR or any equivalent in gccrs.
 MIR cannot be used in GCC unless a the whole gccrs code generation is rewritten to output GIMPLE instead of GENERIC,
 which would be way more complex then the current approach.
 Given the limited development resources of gccrs, this is not a viable
-option. [#](https://gcc-rust.zulipchat.com/#narrow/stream/281658-compiler-development/topic/Borrowchecking.20vs.20.28H.29IR)
+option. [@zulip]
 THIR
 
 TyTy type representions is simplified in gccrs and does not provide any uniqueness guarantees.
@@ -577,7 +568,7 @@ that position, by collecting constraints that would apply to such lifetime abd p
 
 ## Borrow-checker IR Design
 
-```
+```rust
 fn fib(_1: usize) -> i32 {
     bb0: {
         _4 = Operator(_1, const usize);
@@ -731,7 +722,7 @@ Furthermore, it needs to sanitize fresh regions of places,
 that are related (e.g. a field and a parent variable), by adding appropriate constraints between them.
 Relations of region depend on variance of the region within the type. (See Variance Analysis bellow.)
 
-```
+```rust
 Path = Variable
      | Path "." Field // field access
      | Path "[" "]"   // index
@@ -961,3 +952,5 @@ Also a mechanism to map original types to substituted ones, preserving informati
 ## Polonius FFI
 
 ## Error Reporting
+
+# Refereneces {#refs}
