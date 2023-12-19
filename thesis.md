@@ -151,19 +151,56 @@ Another significant contribution of the Polonius project is the fact that it rep
 
 # Polonius
 
-The Polonius engine was created by Niko Matsakis[^pol1] as a next-generation of control-flow sensitive borrow-checker-analysis engine. It was designed as an independent library that can be used both by the `rustc` compiler and different research projects, which makes it suitable for usage in `gccrs`. Polonius interfaces with the compiler by passing a struct of vectors[^pol2] of facts, where each fact is represented by a tuple of integers (or types convertible to integers).
+The Polonius engine was created by [Niko Matsakis](https://github.com/nikomatsakis) and extended by [Rémy Rakic](https://github.com/lqd/) as a next-generation of control-flow sensitive borrow-checker analysis for rustc. It was designed as an independent library that can be used both by the rustc compiler and different research projects, which makes it suitable for usage in gccrs. Polonius interfaces with the compiler by passing around a struct of vectors[^pol1] of facts, where each fact is represented by a tuple of integers [^pol4] (or types convertible to integer). It is completely unaware of the compiler internals.
 
-The engine first preprocesses the input facts. This includes a computation of transitive closures of the facts, computing their initialization and deinitializations that happen over the CFG. Then, it checks for move error, i.e., when ownership of some object is transferred more than once. In the next step, the liveliness of variables is computed. What that means is that the engine finds the smallest sets of CFG nodes, where the variable contents have to be valid because it may be used later.
+[^pol4]: `usize`
 
-[_**TODO** rest of analysis, maybe formal rules to appendix_]
+In the previous chapter, we have mentioned that Polonius differs from NLL in its interpretation of lifetimes. Polonius uses the term "Origin" to better describe the concept. An origin is a set of loans that can be referenced at each CFG point.
 
-## Input Facts
+```rust
+    let r: &'0 i32 = if (cond) {
+            &x /* Loan L0 */
+        } else {
+            &y /* Loan L1 */
+        };
+```
 
-- [_**TODO** describe facts to ilustrate what needs to be done_]
+> **Example:** _The origin of the reference `r` (denoted as `'0`) is the set of loans `L0` and `L1`. Note that this fact is initially unknown, and it is the task of the analysis to compute it._
 
+The engine first preprocesses the input facts. This includes a computation of transitive closures of relations and analyzing all the initialization and deinitializations that happen over the CFG. Then, it checks for move errors, i.e., when ownership of some object is transferred more than once. In the next step, liveness of variables and "outlives" graph (transitive constraints of lifetimes) are computed[@polonius2]. All origins that appear in the type of live variable are considered live.
 
-[^pol1]: [https://github.com/nikomatsakis](https://github.com/nikomatsakis)
-[^pol2]: "A contiguous growable array type" from Rust standard library. ([https://doc.rust-lang.org/std/vec/struct.Vec.html](https://doc.rust-lang.org/std/vec/struct.Vec.html))
+Then Polonius needs to figure out _active loans_. A loan is active at a CFG point if two conditions hold. Some origin that contains the loan is live at the CFG point (i.e., there is a variable that might reference it), and the variable/place referencing the loan was not reassigned. (When a reference variable is reassigned, it points to something else.)
+
+The compiler has to specify all the points in the CFG, where a loan being alive would violate the memory safety rules. Polonius then checks whether such a situation can happen. If it can, it reports the facts involved in the violation.
+
+[^pol1]: A contiguous growable array type from Rust standard library. ([https://doc.rust-lang.org/std/vec/struct.Vec.html](https://doc.rust-lang.org/std/vec/struct.Vec.html))
+
+## Polonius Facts
+
+This section provides a list of facts taken by Polonius to give the reader a better idea of the work that needs to be done by the compiler. The facts are grouped into categories and briefly described. The full list of facts can be found in the [Polonius source code](https://github.com/rust-lang/polonius/blob/master/polonius-engine/src/facts.rs) and the Polonius Book[@polonius].
+
+- Control flow graphs edges (`cfg_edge: (Point, Point)`).
+- Facts regarding variable usage and its effects.
+    - `var_used_at: (Variable, Point)` - Any usage of variable except for a drop (destructor).
+    - `var_defined_at: (Variable, Point)` - Start of scope or reassignment. This reassignment treatment makes the variable act similarly to an [SSA variable](https://en.wikipedia.org/wiki/Static_single-assignment_form).
+    - `var_dropped_at: (Variable, Point)` - Drop (destructor call) of the variable.
+    - `use_of_var_derefs_origin: (Variable, Origin)` - Type of the variable contains the origin.
+    - `drop_of_var_derefs_origin: (Variable, Origin)` - When the drop implementation used the origin.
+- Facts regarding paths and their usages. Paths represent indirect or partial access to a variable (e.g., field access or cast).
+    - `path_is_var: (Path, Variable)` - Lists "trivial" paths that are just a variable.
+    - `child_path: (Path, Path)` - Describes hierarchical (non-transitive) relationships between paths. For example, a field path is a child path of the variable path it is accessed from.
+    - `path_assigned_at_base: (Path, Point)` - Path is assigned at the CFG point. "base" means that this fact is emitted only for the exact path used, not all its parent paths.
+    - `path_moved_at_base: (Path, Point)` - Ownership of origins is transferred at the CFG point.
+    - `path_accessed_at_base: (Path, Point)` - Any memory access to the path (read or write).
+- Facts about relationships (subset relation) of origins.
+    - `known_placeholder_subset: (Origin, Origin)` - Constraints on universal origins (those representing loans that happened outside the function).
+    - `universal_region: (Origin)` - List of universal origins. (See the previous point.)
+    - `subset_base: (Origin, Origin)` - Any relationship between origins required by the subtyping rules.
+    - `placeholder: (Origin, Loan)` - Associates an origin with a loan.
+- Facts about loans.
+    - `loan_issued_at: (Loan, Point)` - Result of borrow expression.
+    - `loan_killed_at: (Loan, Point)` - Loan is no longer live after this point.
+    - `loan_invalidated_at: (Loan, Point)` - If the loan is live at this point, it is an error.
 
 # Comparison of Internal Representations
 
@@ -330,7 +367,7 @@ The analysis has been control-flow sensitive since NLL's introduction in rustc (
 
 The only IR in GCC that contains the CFG information is GIMPLE; however, under normal circumstances, GIMPLE is language agnostic. It is possible to annotate the GIMPLE statements with language-specific information, using special statements, which would have to be generated from special information that would need to be added GENERIC. The statements would need to be preserved by the middle-end passes until the pass building the CFG (that includes 11 passes), after which the facts could be collected. After that, the facts would need to be discarded to avoid complicating the tens of following passes[^afcp2][@gccint, p. 141] and RTL generation. This approach was discussed with senior GCC developers and quickly rejected as it would require a large amount of work, and it would leak front-end specific information into the middle-end, making it more complex. No attempt was made to experiment with this approach.
 
-[^afcp1]: The critical rule of borrow-checking is that for a single borrowed variable, there can only be a single mutable borrow or only immutable borrows valid at each point of the CFG. 
+[^afcp1]: The critical rule of borrow-checking is that for a single borrowed variable, there can only be a single mutable borrow or only immutable borrows valid at each point of the CFG.
 
 [^afcp2]: See file `gcc/passes.def` in the GCC source code.
 
@@ -348,7 +385,6 @@ An option to ease such problems was to radically desugared the HIR to only basic
 
 To ensure all possible approaches were considered, we have discussed the possibility of implementing MIR in gccrs. This approach has some advantages and many problems. Should the MIR be implemented in a completely compatible way, it would be possible to use tools like MIRI[ref needed] with gccrs. The borrow-checking would be very similar to rustc's borrow-checking, and parts of rustc's code might even be reused. Gccrs would also be more ready for Rust-specific optimizations. The final advantage is that the current test suite would cover the process of lowering HIR to MIR, as all transformations would affect the code generation. The main problem with this approach is that it would require a large portion of gccrs to be reimplemented, delaying the project by a considerable amount of time. Should such an approach be taken, any effort on borrow-checking would be delayed until the MIR is implemented. It was decided by the maintainers[@zulip] that such an approach is not feasible and that gccrs will not use MIR in any foreseeable future.
 
-
 After Arthur Cohen suggested keeping things simpler, I decided to experiment with a different, minimalistic approach—to build a radically simplified MIR-like IR that keeps only the bare minimum of information needed for borrow-checking. Given the unexpected productivity of this approach, it was decided to go on with it. This IR, later called the borrow-checker IR (BIR), only focuses on the flow of data, and it ignores the actual operations. The main disadvantage of this approach is that it creates a dead branch of the compilation pipeline that is not used for code generation, and therefore, it is not covered by the existing test suite. To overcome this difficulty, the BIR and its textual representation (dump) are designed to be as similar to rustc's MIR as possible. This allows us to check the generated BIR against the MIR generated by rustc, at least for simple programs. This is the final approach used in this work. Details of the BIR design are described in the next section.
 
 ![Placement of the borrow-checker IR in the compilation pipeline](./bir.svg){ width=35% }
@@ -358,15 +394,45 @@ After Arthur Cohen suggested keeping things simpler, I decided to experiment wit
 Before the borrow-checking itself can be performed, specific information about types needs to be collected when HIR is type-checked and TyTy types are created and processed. The TyTy needs to resolve and store information about lifetimes and their constraints. At this point, lifetimes are resolved from string names, and their bounding clauses are found. There are different kinds of lifetimes that can be encountered. Inside types, the lifetimes are bound to the lifetime parameters of generic types. In function pointers, lifetimes can be universally quantified (meaning that the function must work for every possible lifetime). In function definitions, lifetimes can be elided when all references have the same lifetime. In function bodies, lifetimes can be bound to the lifetime parameters of the function, or they can be omitted, in which case they are inferred
 [^bp1].
 
-_**TODO** build bir_
+_
 
-_**TODO** collect facts_
+*
 
-_**TODO** ffi polonius_
+*TODO
+**
+build bir_
 
-_**TODO** run the analysis_
+_
 
-_**TODO** receive results_
+*
+
+*TODO
+**
+collect facts_
+
+_
+
+*
+
+*TODO
+**
+ffi polonius_
+
+_
+
+*
+
+*TODO
+**
+run the analysis_
+
+_
+
+*
+
+*TODO
+**
+receive results_
 
 [^bp1]: At least Rust semantics thinks about it that way. In reality, the compiler only checks that there exists some lifetime that could be used in that position by collecting constraints that would apply to such a lifetime and passing them to the borrow-checker.
 
@@ -402,7 +468,9 @@ fn fib(_1: usize) -> i32 {
 ```
 
 > A shortened example of a BIR dump of a simple Rust program. The program computes the n-th Fibonacci number.
-> The source code, full dump, and legend can be found in the [_appendix C_](#appendix-c-bir-dump-example).
+> The source code, full dump, and legend can be found in the [
+_appendix
+C_](#appendix-c-bir-dump-example).
 > This example comes from a "BIR Design Notes," which is part of the source tree and where provides an introduction for a developer getting familiar with the basic aspects of the borrow-checker implementation.
 
 The BIR of a single function is composed of basic metadata about the function (like arguments, return type, explicit lifetimes, etc.), a list of basic blocks, and a list of places.
@@ -480,7 +548,12 @@ In the second phase, the BIR is traversed along the CFG, and dynamic facts are c
 ### Subtyping and Variance
 
 In the basic interpretation of Rust language semantics (one used by programmers to reason about their code, not the one used by the compiler), lifetimes are part of the type and are always present. If a lifetime is not mentioned in the program explicitly, it is inferred the same way as a part of type would be
-(e.g. `let a = (_, i32) = (true, 5);` completes the type to `(bool, i32)`) Note, It is actually impossible to write those lifetimes. In the Rust program, all explicit lifetime annotations are so-called universal and correspond to any borrow that happened **outside** the function, and therefore, it is alive for the whole body of the function. Explicit lifetime annotations corresponding to regions spanning only a part of the function body would be pointless, since those regions are precisely determined by the code itself, and there is nothing to further specify. Explicit lifetimes annotations are only used to represent constraints following from code that the borrow-checker cannot see.
+(e.g. `let a = (_, i32) = (true, 5);` completes the type to `(bool, i32)`) Note, It is actually impossible to write those lifetimes. In the Rust program, all explicit lifetime annotations are so-called universal and correspond to any borrow that happened
+
+*
+
+*outside
+** the function, and therefore, it is alive for the whole body of the function. Explicit lifetime annotations corresponding to regions spanning only a part of the function body would be pointless, since those regions are precisely determined by the code itself, and there is nothing to further specify. Explicit lifetimes annotations are only used to represent constraints following from code that the borrow-checker cannot see.
 
 Let us make an example. In the example, we need to infer the type of x, such that it is a subtype of both `&'a T` and `&'b T`. We need to make sure, that if we further use x, that is safe with regard to all loans[^var1]that it can contain (here `a` or `b`).
 
@@ -504,18 +577,17 @@ In Rust, unlike in dynamic languages like Java, the only subtyping relation othe
 > `F<T>` is contravariant over `T` if `T` being a subtype of `U` implies that `F<U>` is a subtype of F<T>
 >
 > `F<T>` is invariant over `T` otherwise (no subtyping relation can be derived)
-> 
+>
 > [@reference]
 
 
 
 Let us see what that means on an example specific to lifetimes. For a simple reference type `&'a T`, the lifetime parameter `'a` is covariant. That means that if we have a reference `&'a T` we can coerce it to
-`&'b T`, then `'a` is a subtype of `'b`. In other words, if we are storing a reference to some memory, it is sound to assign it to a reference that lives for a shorter period of time. That is if it is safe to dereference a reference within any point of period `'a`, it is also safe to dereference it within any point of period `'b`, (`'b` is subset of `'a`) [^var2]. 
+`&'b T`, then `'a` is a subtype of `'b`. In other words, if we are storing a reference to some memory, it is sound to assign it to a reference that lives for a shorter period of time. That is if it is safe to dereference a reference within any point of period `'a`, it is also safe to dereference it within any point of period `'b`, (`'b` is subset of `'a`) [^var2].
 
 [^var2]: A subset of CFG nodes.
 
-The situation is different when we pass a reference to a function as an argument. In that case, the lifetime parameter is contravariant.
-For function parameters, we need to ensure that the parameter lives as long as the function needs it to. If we have a function pointer of type `fn foo<'a>(x: &'a T)`, we can coerce it to `fn foo<'b>(x: &'b T)`, where `'b` lives longer than `'a`.
+The situation is different when we pass a reference to a function as an argument. In that case, the lifetime parameter is contravariant. For function parameters, we need to ensure that the parameter lives as long as the function needs it to. If we have a function pointer of type `fn foo<'a>(x: &'a T)`, we can coerce it to `fn foo<'b>(x: &'b T)`, where `'b` lives longer than `'a`.
 
 Let us look at that visually. In the following code, we have region `'a` where it is saved to reference the storage of `x`, and region `'b` where it is safe to reference the storage of `y`. If a function safely works with a reference of lifetime `'b` it will also safely work with a reference of lifetime `'a`. Hence, we can "pretend" (understand: coerce) what `fn(&'b T)` is `fn(&'a T)`.
 
@@ -588,11 +660,24 @@ struct Foo<'a, 'b, T> {
 
 ## Representation of Lifetimes in TyTy
 
-[_**TODO**_]
+[
+_
+
+*
+
+*TODO
+**_]
 
 ## Error Reporting
 
-[_**TODO** this is kinda mixed with the next chapter_]
+[
+_
+
+*
+
+*TODO
+**
+this is kinda mixed with the next chapter_]
 
 As each function is analyzed separately, the compiler can easily report which functions violate the rules. Currently, only the kind of violation is communicated from the Polonius engine to the compiler. More detailed reporting is an issue for future work.
 
@@ -610,7 +695,16 @@ The final stage of the borrow-checker development would be to implement heuristi
 
 # Current State
 
-[__**TODO** very much todo, dont even read this__]
+[
+_
+_
+
+*
+
+*TODO
+**
+very much todo, dont even read this
+__]
 
 ## Kind of Detected Errors
 
@@ -643,7 +737,7 @@ The resolution of named lifetimes to their binding clauses was added. `TyTy` typ
 ::: {#refs}
 :::
 
-#                   
+#                                     
 
 # Appendix A: AST Dump Example
 
