@@ -165,41 +165,7 @@ In the previous chapter, we have mentioned that Polonius differs from NLL in its
         };
 ```
 
->
-*
-*Example:
-**
-_The
-origin
-of
-the
-reference `r` (
-denoted
-as `'0`)
-is
-the
-set
-of
-loans `L0`
-and `L1`.
-Note
-that
-this
-fact
-is
-initially
-unknown,
-and
-it
-is
-the
-task
-of
-the
-analysis
-to
-compute
-it._
+> **Example:** _The origin of the reference `r` (denoted as `'0`) is the set of loans `L0` and `L1`. Note that this act is initially unknown, and it is the task of the analysis to compute it._
 
 The engine first preprocesses the input facts. This includes a computation of transitive closures of relations and analyzing all the initialization and deinitializations that happen over the CFG. Then, it checks for move errors, i.e., when ownership of some object is transferred more than once. In the next step, liveness of variables and "outlives" graph (transitive constraints of lifetimes) are computed[@polonius2]. All origins that appear in the type of live variable are considered live.
 
@@ -430,45 +396,15 @@ After Arthur Cohen suggested keeping things simpler, I decided to experiment wit
 Before the borrow-checking itself can be performed, specific information about types needs to be collected when HIR is type-checked and TyTy types are created and processed. The TyTy needs to resolve and store information about lifetimes and their constraints. At this point, lifetimes are resolved from string names, and their bounding clauses are found. There are different kinds of lifetimes that can be encountered. Inside types, the lifetimes are bound to the lifetime parameters of generic types. In function pointers, lifetimes can be universally quantified (meaning that the function must work for every possible lifetime). In function definitions, lifetimes can be elided when all references have the same lifetime. In function bodies, lifetimes can be bound to the lifetime parameters of the function, or they can be omitted, in which case they are inferred
 [^bp1].
 
-_
+_**TODO**build bir_
 
-*
+_**TODO**collect facts_
 
-*TODO
-**
-build bir_
+_**TODO**ffi polonius_
 
-_
+_**TODO**run the analysis_
 
-*
-
-*TODO
-**
-collect facts_
-
-_
-
-*
-
-*TODO
-**
-ffi polonius_
-
-_
-
-*
-
-*TODO
-**
-run the analysis_
-
-_
-
-*
-
-*TODO
-**
-receive results_
+_**TODO** receive results_
 
 [^bp1]: At least Rust semantics thinks about it that way. In reality, the compiler only checks that there exists some lifetime that could be used in that position by collecting constraints that would apply to such a lifetime and passing them to the borrow-checker.
 
@@ -584,12 +520,7 @@ In the second phase, the BIR is traversed along the CFG, and dynamic facts are c
 ### Subtyping and Variance
 
 In the basic interpretation of Rust language semantics (one used by programmers to reason about their code, not the one used by the compiler), lifetimes are part of the type and are always present. If a lifetime is not mentioned in the program explicitly, it is inferred the same way as a part of type would be
-(e.g. `let a = (_, i32) = (true, 5);` completes the type to `(bool, i32)`) Note, It is actually impossible to write those lifetimes. In the Rust program, all explicit lifetime annotations are so-called universal and correspond to any borrow that happened
-
-*
-
-*outside
-** the function, and therefore, it is alive for the whole body of the function. Explicit lifetime annotations corresponding to regions spanning only a part of the function body would be pointless, since those regions are precisely determined by the code itself, and there is nothing to further specify. Explicit lifetimes annotations are only used to represent constraints following from code that the borrow-checker cannot see.
+(e.g. `let a = (_, i32) = (true, 5);` completes the type to `(bool, i32)`) Note, It is actually impossible to write those lifetimes. In the Rust program, all explicit lifetime annotations are so-called universal and correspond to any borrow that happened **outside** the function, and therefore, it is alive for the whole body of the function. Explicit lifetime annotations corresponding to regions spanning only a part of the function body would be pointless, since those regions are precisely determined by the code itself, and there is nothing to further specify. Explicit lifetimes annotations are only used to represent constraints following from code that the borrow-checker cannot see.
 
 Let us make an example. In the example, we need to infer the type of x, such that it is a subtype of both `&'a T` and `&'b T`. We need to make sure, that if we further use x, that is safe with regard to all loans[^var1]that it can contain (here `a` or `b`).
 
@@ -615,8 +546,6 @@ In Rust, unlike in dynamic languages like Java, the only subtyping relation othe
 > `F<T>` is invariant over `T` otherwise (no subtyping relation can be derived)
 >
 > [@reference]
-
-
 
 Let us see what that means on an example specific to lifetimes. For a simple reference type `&'a T`, the lifetime parameter `'a` is covariant. That means that if we have a reference `&'a T` we can coerce it to
 `&'b T`, then `'a` is a subtype of `'b`. In other words, if we are storing a reference to some memory, it is sound to assign it to a reference that lives for a shorter period of time. That is if it is safe to dereference a reference within any point of period `'a`, it is also safe to dereference it within any point of period `'b`, (`'b` is subset of `'a`) [^var2].
@@ -710,14 +639,7 @@ Inside TyTy, lifetimes are represented in the following ways. Named lifetimes ar
 
 ## Error Reporting
 
-[
-_
-
-*
-
-*TODO
-**
-this is kinda mixed with the next chapter_]
+[_**TODO** this is kinda mixed with the next chapter_]
 
 As each function is analyzed separately, the compiler can easily report which functions violate the rules. Currently, only the kind of violation is communicated from the Polonius engine to the compiler. More detailed reporting is an issue for future work.
 
@@ -735,16 +657,7 @@ The final stage of the borrow-checker development would be to implement heuristi
 
 # Current State
 
-[
-_
-_
-
-*
-
-*TODO
-**
-very much todo, dont even read this
-__]
+[_**TODO**very much todo, don't even read this_]
 
 ## Kind of Detected Errors
 
