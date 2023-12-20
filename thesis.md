@@ -165,11 +165,47 @@ In the previous chapter, we have mentioned that Polonius differs from NLL in its
         };
 ```
 
-> **Example:** _The origin of the reference `r` (denoted as `'0`) is the set of loans `L0` and `L1`. Note that this fact is initially unknown, and it is the task of the analysis to compute it._
+>
+*
+*Example:
+**
+_The
+origin
+of
+the
+reference `r` (
+denoted
+as `'0`)
+is
+the
+set
+of
+loans `L0`
+and `L1`.
+Note
+that
+this
+fact
+is
+initially
+unknown,
+and
+it
+is
+the
+task
+of
+the
+analysis
+to
+compute
+it._
 
 The engine first preprocesses the input facts. This includes a computation of transitive closures of relations and analyzing all the initialization and deinitializations that happen over the CFG. Then, it checks for move errors, i.e., when ownership of some object is transferred more than once. In the next step, liveness of variables and "outlives" graph (transitive constraints of lifetimes) are computed[@polonius2]. All origins that appear in the type of live variable are considered live.
 
-Then Polonius needs to figure out _active loans_. A loan is active at a CFG point if two conditions hold. Some origin that contains the loan is live at the CFG point (i.e., there is a variable that might reference it), and the variable/place referencing the loan was not reassigned. (When a reference variable is reassigned, it points to something else.)
+Then Polonius needs to figure out
+_active
+loans_. A loan is active at a CFG point if two conditions hold. Some origin that contains the loan is live at the CFG point (i.e., there is a variable that might reference it), and the variable/place referencing the loan was not reassigned. (When a reference variable is reassigned, it points to something else.)
 
 The compiler has to specify all the points in the CFG, where a loan being alive would violate the memory safety rules. Polonius then checks whether such a situation can happen. If it can, it reports the facts involved in the violation.
 
@@ -656,17 +692,21 @@ struct Foo<'a, 'b, T> {
 - The final variance is `f0=+`, `f1=o` and `f2=*`:
     - `f0` is evident,
     - `f1` stayed bivariant, because it was not mentioned in the type,
-    - `f2` is invariant, because it is used in both covariant and contravariant position.
+    - `f2` is invariant, because it s is used in both covariant and contravariant position.
 
 ## Representation of Lifetimes in TyTy
 
-[
-_
+> The term _lifetime_ is used in this work to refer to the syntactic object in HIR and AST. In the source code it corresponds to either explicit universal[^lifetimes] lifetime annotation (`'a`), elided universal lifetime annotation[@reference](https://doc.rust-lang.org/reference/lifetime-elision.html), and local/existential[^lifetimes] lifetimes, which are always inferred. In contrast, _region_/_origin_ is used to refer to the semantic object. The object is in fact an inference variable, and its value is computed by the borrow-checker. The term _region_ is used by NLL to referer to a set of CFG points. Polonius introduced the term _origin_ to refer to a set of _loans_. In this text and the implementation, we use the two terms interchangeably.
 
-*
+[^lifetimes]: There are two kinds of lifetimes in Rust semantics: universal and existential. Universal lifetimes corresponds to code that happens outside the function. It is called universal, because in the borrow-checker rules, it is universally quantified. That means that the function has to be valid _for all_ possible outside code that satisfies the specified (or implied) constraints. Existential lifetimes corresponds to code that happens inside the function. It is called existential, because in the borrow-checker rules, it is existentially quantified. That means that the code has to be valid _for some_ set of _loans_ (or CFG points). [TODO: should this be here?]
 
-*TODO
-**_]
+In order to analyze more complex lifetimes than just simple references, it was necessary to add representation of lifetime parameters to the type system and unify it with the representation of lifetimes in the rest of the compiler. The first step is to resolve the lifetimes and bind them to their bounding clauses. Gccrs recognizes four kinds of regions. In a function body, explicit lifetimes annotations result in "named" lifetime and implicit lifetimes annotations result in "anonymous" lifetimes. Within generic data types lifetimes resolved to lifetime parameters are called "early-bound." For function pointers and traits, lifetimes can be universally quantified using the `for` clause[^tyty1]. Those lifetimes are not resolved when the definition is analyzed but only when this type is used. Hence, the name is "late-bound" lifetimes. In addition, there is a representation for unresolved lifetimes. It is used, for example, when a generic type is defined, but the generic arguments have not been provided yet. Any occurrence of an unresolved lifetime after type checking it to be treated as a compiler bug.
+
+[^tyty1]: `for<'a> fn(&'a i32) -> &'a i32`
+
+Inside TyTy, lifetimes are represented in the following ways. Named lifetimes are enumerated. Anonymous lifetimes are assumed to be always distinct (but they are represented the same at this stage). Early bound lifetimes are represented by the relative position of the lifetime parameter it is bound to. In generic types, the lifetime arguments are stored together with the type arguments, which ensures their automatic propagation. One issue with this automatic propagation is that the bindings of early bound lifetimes are updated. That means that by a simple inspection of the body of the generic type, one would not be able to resolve the lifetimes. This is resolved by a trick. Each TyTy type is identified by an id. When generic arguments are substituted, a clone of the type with a fresh id is created. What we would like to achieve is to have the same state that is in rustc: the original body and up-to-date list of generic arguments. This can be achieved by storing the id of the original type in addition to the current id, and it can be looked up when needed[^dream]. The analysis can then traverse the original type, and when a type placeholder is encountered, the appropriate argument is looked up in the current type.
+
+[^dream]: This was once revealed to me in a dream.
 
 ## Error Reporting
 
@@ -737,7 +777,7 @@ The resolution of named lifetimes to their binding clauses was added. `TyTy` typ
 ::: {#refs}
 :::
 
-#                                     
+#                                      
 
 # Appendix A: AST Dump Example
 
