@@ -43,16 +43,15 @@ The key idea behind Rust memory safety is to strictly (within the type system) d
 Let us consider the following example: We have a vector-like structure (a dynamic array), and we want to store references to integers as elements. We need to make sure that as long as the vector exists, all references stored in it are valid. However, we do not want the vector to own the integers. First, we introduce a lifetime parameter `'a`, which represents all the regions where the vector itself is alive. This parameter will be substituted at a particular use site with a concrete lifetime.
 
 ```rust
-struct Vec<'a> { ... }
+    struct Vec<'a> { ... }
 ```
 
 Then, for the add method, we introduce a lifetime parameter `'b`, which restricts the inserted reference. This parameter is substituted with a concrete lifetime of each reference when the method is invoked. Finally, we will require that the method can only be used with lifetimes, for which we can guarantee that `'b` is a subset of `'a` (in terms of parts of the program).
 
 ```rust
-
-impl<'a> Vec<'a> {
-    fn add<'b> where 'a: 'b (&mut self, x: &'b i32) { ... }
-}
+    impl<'a> Vec<'a> {
+        fn add<'b> where 'a: 'b (&mut self, x: &'b i32) { ... }
+    }
 ```
 
 ## The Evolution of Borrow-Checking in rustc
@@ -63,14 +62,14 @@ This section describes how the analysis evolved, gradually rejecting less memory
 The simplest variant of borrow-checker is based on stack variable scopes. A reference is valid from the point in the program (here in terms of statements and expression) where it is created until the end of the current scope. To simplify the common programming patterns, this approach can be extended to handle some special cases. For example, when a reference is created in function parameters, it is valid until the end of the function call.
 
 ```rust
-{
-    let mut data = vec!['a', 'b', 'c']; // --+ 'scope
-    capitalize(&mut data[..]);          //   |
-//  ^~~~~~~~~~~~~~~~~~~~~~~~~ 'lifetime //   |
-    data.push('d');                     //   |
-    data.push('e');                     //   |
-    data.push('f');                     //   |
-} // <---------------------------------------+
+    {
+        let mut data = vec!['a', 'b', 'c']; // --+ 'scope
+        capitalize(&mut data[..]);          //   |
+    //  ^~~~~~~~~~~~~~~~~~~~~~~~~ 'lifetime //   |
+        data.push('d');                     //   |
+        data.push('e');                     //   |
+        data.push('f');                     //   |
+    } // <---------------------------------------+
 ```
 
 [//]: # (cite the rfc)
@@ -78,29 +77,29 @@ The simplest variant of borrow-checker is based on stack variable scopes. A refe
 However, a very common modification might cause the program to be rejected.
 
 ```rust
-{
-    let mut data = vec!['a', 'b', 'c'];
-    let slice = &mut data[..]; // <-+ 'lifetime
-    capitalize(slice);         //   |
-    data.push('d'); // ERROR!  //   |
-    data.push('e'); // ERROR!  //   |
-    data.push('f'); // ERROR!  //   |
-} // <------------------------------+
+    {
+        let mut data = vec!['a', 'b', 'c'];
+        let slice = &mut data[..]; // <-+ 'lifetime
+        capitalize(slice);         //   |
+        data.push('d'); // ERROR!  //   |
+        data.push('e'); // ERROR!  //   |
+        data.push('f'); // ERROR!  //   |
+    } // <------------------------------+
 ```
 
 Now, there is no simple way to say when the lifetime of the reference should end to prove that his program is safe from its syntactic structure. The code above can be fixed by explicitly specifying where the lifetime should end. However, this clutters the code, and it cannot be used for more advanced cases.
 
 ```rust
-{
-    let mut data = vec!['a', 'b', 'c'];
     {
-        let slice = &mut data[..]; // <-+ 'lifetime
-        capitalize(slice);         //   |
-    } // <------------------------------+
-    data.push('d'); // OK
-    data.push('e'); // OK
-    data.push('f'); // OK
-}
+        let mut data = vec!['a', 'b', 'c'];
+        {
+            let slice = &mut data[..]; // <-+ 'lifetime
+            capitalize(slice);         //   |
+        } // <------------------------------+
+        data.push('d'); // OK
+        data.push('e'); // OK
+        data.push('f'); // OK
+    }
 ```
 
 One of those more advanced cases happens when lifetimes are not symmetric in conditional branches. A typical case is when a condition checks the presence of a value. In the positive branch, we are holding a reference to the value, but in the negative branch, we do not. Therefore, it is safe to create a new reference in the negative branch.
@@ -128,17 +127,17 @@ The following code cannot be handled by NLL, but Polonius can handle it. The pro
 `'a`) has to be valid for the whole function. Since `v` is returned, it has to outlive the lifetime `'a`. However, the lifetime of `v` is bound to the lifetime of the reference to the hashmap it is stored in. It is forcing `map` to be borrowed (transitively) for at least the whole function. That includes the `map.insert` call, which needs to borrow the hashmap itself. Resulting in an error.
 
 ```rust
-fn get_or_insert<'a>(
-    map: &'a mut HashMap<u32, String>,
-) -> &'a String {
-    match HashMap::get(&*map, &22) {
-        Some(v) => v,
-        None => {
-            map.insert(22, String::from("hi"));
-            &map[&22]
+    fn get_or_insert<'a>(
+        map: &'a mut HashMap<u32, String>,
+    ) -> &'a String {
+        match HashMap::get(&*map, &22) {
+            Some(v) => v,
+            None => {
+                map.insert(22, String::from("hi"));
+                &map[&22]
+            }
         }
     }
-}
 ```
 
 However, we can clearly see that no variable available in the `None` branch actually uses the reference to the hashmap. This is where Polonius can help.
@@ -224,7 +223,7 @@ The core of LLVM is a three-address code (3-AD)[^comp1] representation, called t
 *basic
 block*), connected by control flow instructions, forming a control flow graph (CFG).
 
-![LLVM IR CFG Example (generated by Compiler Explorer)](llvm-ir-cfg-example.svg){ width=75% }
+![LLVM IR CFG Example (generated by Compiler Explorer)](llvm-ir-cfg-example.svg){ width=90% }
 
 GCC, on the other hand, interfaces with the front-ends using a tree-based representation called the GENERIC[@gccint, p. 175]. GENERIC was created as a generalized form of AST shared by most front-ends. GCC provides a set of common tree nodes to describe all the standard language constructs in the GENERIC IR. Front-ends may define language-specific constructs and provide hooks for their handling.[@gccint, p. 212] This representation is then transformed into the GIMPLE representation, which is mostly[^gcc1] a 3-AD representation. It does so by breaking down expressions into a sequence of statements and introducing temporary variables. This transformation is done inside the compiler platform, not in the front-end. This approach makes the front-ends smaller and shifts more work into the shared part. The GIMPLE representation does not contain information specific to each front-end (programming language). However, it is possible to store language-specific information in GIMPLE by adding entirely new statements.[@gccint, p. 262] This is possible because GIMPLE is not a stable interface.
 
@@ -301,13 +300,13 @@ HIR is the primary representation used for most rustc operations[@devguide, HIR]
 [^hir2]: [https://rustc-dev-guide.rust-lang.org/type-checking.html](https://rustc-dev-guide.rust-lang.org/type-checking.html)
 
 ```rust
-#[prelude_import]
-use ::std::prelude::rust_2015::*;
-#[macro_use]
-extern crate std;
-struct Foo(i32);
+    #[prelude_import]
+    use ::std::prelude::rust_2015::*;
+    #[macro_use]
+    extern crate std;
+    struct Foo(i32);
 
-fn foo(x: i32) -> Foo { Foo(x) }
+    fn foo(x: i32) -> Foo { Foo(x) }
 ```
 
 > One of HIR dump formats: HIR structure still corresponds to a valid Rust program, equivalent to the original one. `rustc` provides a textual representation of HIR, which displays such a program.
@@ -328,15 +327,15 @@ Inside the HIR, after the type-checking analysis, TyTy types of nodes can be loo
 (namely, the type-check context). Each `THIR` node directly contains a pointer to its type. In MIR, the type is stored inside each place.
 
 ```rust
-fn foo(_1: i32) -> Foo {
-    debug x => _1;
-    let mut _0: Foo;	
+    fn foo(_1: i32) -> Foo {
+        debug x => _1;
+        let mut _0: Foo;	
 
-    bb0: {
-        _0 = Foo(_1);
-        return;
+        bb0: {
+            _0 = Foo(_1);
+            return;
+        }
     }
-}
 ```
 
 > MIR dump example: For further details, see the [Source Code Representation]() chapter of the rustc developer guide.
@@ -410,31 +409,31 @@ _**TODO** receive results_
 
 The borrow-checker IR (BIR) is a three-address code representation designed to be close to a subset of rustc's MIR. Same as MIR, it represents the body of a single function (or other function-like item, e.g., a closure) since borrow-checking is performed on each function separately. It ignores particular operations and merges them into a few abstract operations focusing on data flow.
 
-```rust
-fn fib(_1: usize) -> i32 {
-    bb0: {
-        _4 = Operator(_1, const usize);
-        switchInt(_4) -> [bb1, bb2];
-    }
+```
+    fn fib(_1: usize) -> i32 {
+        bb0: {
+            _4 = Operator(_1, const usize);
+            switchInt(_4) -> [bb1, bb2];
+        }
 
-    ... 
+        ... 
 
-    bb6: {
-        _8 = Operator(_1, const usize);
-        _9 = Call(fib)(_8, ) -> [bb7];
-    }
+        bb6: {
+            _8 = Operator(_1, const usize);
+            _9 = Call(fib)(_8, ) -> [bb7];
+        }
 
-    bb7: {
-        _10 = Operator(_7, _9);
-        _2 = _10;
-        goto -> bb8;
-    }
+        bb7: {
+            _10 = Operator(_7, _9);
+            _2 = _10;
+            goto -> bb8;
+        }
 
-    bb8: {
-        _0 = _2;
-        return;
+        bb8: {
+            _0 = _2;
+            return;
+        }
     }
-}
 ```
 
 > A shortened example of a BIR dump of a simple Rust program. The program computes the n-th Fibonacci number.
@@ -504,11 +503,11 @@ The BIR fact collection extracts the Polonius facts from the BIR and performs ad
 The fact collection is performed in two phases. First, static facts are collected from the place database. Those include copying of universal region constraints (constraints corresponding to lifetime parameters of the function)
 Moreover, collected facts from the place database. Polonius needs to know which places correspond to variables and which form paths (see definition below). Furthermore, it needs to sanitize fresh regions of places that are related (e.g., a field and a parent variable) by adding appropriate constraints between them. Relations of the region depend on the variance of the region within the type. (See Variance Analysis below.)
 
-```rust
-Path = Variable
-     | Path "." Field // field access
-     | Path "[" "]"   // index
-     | "*" Path
+```
+    Path = Variable
+         | Path "." Field // field access
+         | Path "[" "]"   // index
+         | "*" Path
 ```
 
 > Formal definition of paths from the Polonius book.
@@ -524,13 +523,13 @@ Let us make an example. In the example, we need to infer the type of x, such tha
 
 [^var1]: Loan is the result of borrow operation.
 
-```rust
-let mut x;
-if (b) {
-    x = a; // a: &'a T
-} else {
-    x = b; // b: &'b T
-}
+```
+    let mut x;
+    if (b) {
+        x = a; // a: &'a T
+    } else {
+        x = b; // b: &'b T
+    }
 ```
 
 In Rust, unlike in dynamic languages like Java, the only subtyping relation other than identity is caused by lifetimes[^var3]. Two regions (corresponding to lifetimes) can be either unrelated, a subset of each other (in terms of a set of CFG nodes) (denoted `'a: 'b`), or equal (typically a result of `'a: 'b` and `'b: 'a`). The dependency of subtyping on the inner parameter is called variance.
@@ -555,10 +554,10 @@ The situation is different when we pass a reference to a function as an argument
 Let us look at that visually. In the following code, we have region `'a` where it is saved to reference the storage of `x`, and region `'b` where it is safe to reference the storage of `y`. If a function safely works with a reference of lifetime `'b` it will also safely work with a reference of lifetime `'a`. Hence, we can "pretend" (understand: coerce) what `fn(&'b T)` is `fn(&'a T)`.
 
 ```rust
-let x = 5;        | region 'a
-{                 |
-    let y = 7;    |             | region 'b          
-}                 |
+    let x = 5;        // region 'a
+    {                 //
+        let y = 7;    //            // region 'b          
+    }                 //
 ```
 
 The return type of function is effectively an assignment to a local variable (just across function boundaries) and, therefore, is covariant.
@@ -590,10 +589,10 @@ Once all types in the crate are processed, the constraints are solved using a fi
 ##### Example of Algorithm Execution
 
 ```rust
-struct Foo<'a, 'b, T> {
-    x: &'a T,
-    y: Bar<T>,
-}
+    struct Foo<'a, 'b, T> {
+        x: &'a T,
+        y: Bar<T>,
+    }
 ```
 
 - Struct foo has three generic parameters, leading to 3 variables. `f0=o`, `f1=o` and `f2=o`.
