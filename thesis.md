@@ -258,39 +258,39 @@ construct[@reference [^rustc3]].
 > This very simple code will be used as an example throughout this section.
 
 ```
-Fn {
-  generics: Generics { ... },
-  sig: FnSig {
-    header: FnHeader { ... },
-      decl: FnDecl {
-        inputs: [
-          Param {
-            ty: Ty {
-                Path { segments: [ PathSegment { ident: i32#0 } ] }
+    Fn {
+      generics: Generics { ... },
+      sig: FnSig {
+        header: FnHeader { ... },
+          decl: FnDecl {
+            inputs: [
+              Param {
+                ty: Ty {
+                    Path { segments: [ PathSegment { ident: i32#0 } ] }
+                }
+                pat: Pat { Ident(x#0) }
+              },
+            ],
+            output: Ty {
+                Path { segments: [ PathSegment { ident: Foo#0 } ]
             }
-            pat: Pat { Ident(x#0) }
           },
-        ],
-        output: Ty {
-            Path { segments: [ PathSegment { ident: Foo#0 } ]
-        }
       },
-  },
-  body: Block {
-    stmts: [ Stmt { Expr {
-      Call(
-        Expr {
-            Path { segments: [ PathSegment { ident: Foo#0 } ] }
-        }
-        params: [
-          Expr {
-            Path { segments: [ PathSegment { ident: x#0 } ] }
-          }
+      body: Block {
+        stmts: [ Stmt { Expr {
+          Call(
+            Expr {
+                Path { segments: [ PathSegment { ident: Foo#0 } ] }
+            }
+            params: [
+              Expr {
+                Path { segments: [ PathSegment { ident: x#0 } ] }
+              }
+            ]
+          )
         ]
-      )
-    ]
-  }
-}
+      }
+    }
 ```
 
 > This is a textual representation of a small and simplified part of the abstract syntax tree (AST) of the example program. The full version can be found in the [Appendix A](#appendix-a-ast-dump-example).
@@ -391,25 +391,30 @@ After Arthur Cohen suggested keeping things simpler, I decided to experiment wit
 ## The Borrow-Checking Process
 
 Before the borrow-checking itself can be performed, specific information about types needs to be collected when HIR is type-checked and TyTy types are created and processed. The TyTy needs to resolve and store information about lifetimes and their constraints. At this point, lifetimes are resolved from string names, and their bounding clauses are found. There are different kinds of lifetimes that can be encountered. Inside types, the lifetimes are bound to the lifetime parameters of generic types. In function pointers, lifetimes can be universally quantified (meaning that the function must work for every possible lifetime). In function definitions, lifetimes can be elided when all references have the same lifetime. In function bodies, lifetimes can be bound to the lifetime parameters of the function, or they can be omitted, in which case they are inferred
-[^bp1].
-
-_**TODO**build bir_
-
-_**TODO**collect facts_
-
-_**TODO**ffi polonius_
-
-_**TODO**run the analysis_
-
-_**TODO** receive results_
+[^bp1]. The type-checked HIR is then transformed to the borrow-checker IR (BIR). The BIR is then processed to extract facts for Polonius. At this phase, some easy to detect errors can be emitted. The facts are then passed to Polonius, which computes the results of the analysis. The results are then passed back to the compiler, which translates them into error messages.
 
 [^bp1]: At least Rust semantics thinks about it that way. In reality, the compiler only checks that there exists some lifetime that could be used in that position by collecting constraints that would apply to such a lifetime and passing them to the borrow-checker.
+
+
+## Representation of Lifetimes in TyTy
+
+> The term _lifetime_ is used in this work to refer to the syntactic object in HIR and AST. In the source code it corresponds to either explicit universal[^lifetimes] lifetime annotation (`'a`), elided universal lifetime annotation[@reference](https://doc.rust-lang.org/reference/lifetime-elision.html), and local/existential[^lifetimes] lifetimes, which are always inferred. In contrast, _region_/_origin_ is used to refer to the semantic object. The object is in fact an inference variable, and its value is computed by the borrow-checker. The term _region_ is used by NLL to referer to a set of CFG points. Polonius introduced the term _origin_ to refer to a set of _loans_. In this text and the implementation, we use the two terms interchangeably.
+
+[^lifetimes]: There are two kinds of lifetimes in Rust semantics: universal and existential. Universal lifetimes corresponds to code that happens outside the function. It is called universal, because in the borrow-checker rules, it is universally quantified. That means that the function has to be valid _for all_ possible outside code that satisfies the specified (or implied) constraints. Existential lifetimes corresponds to code that happens inside the function. It is called existential, because in the borrow-checker rules, it is existentially quantified. That means that the code has to be valid _for some_ set of _loans_ (or CFG points). [TODO: should this be here?]
+
+In order to analyze more complex lifetimes than just simple references, it was necessary to add representation of lifetime parameters to the type system and unify it with the representation of lifetimes in the rest of the compiler. The first step is to resolve the lifetimes and bind them to their bounding clauses. Gccrs recognizes four kinds of regions. In a function body, explicit lifetimes annotations result in "named" lifetime and implicit lifetimes annotations result in "anonymous" lifetimes. Within generic data types lifetimes resolved to lifetime parameters are called "early-bound." For function pointers and traits, lifetimes can be universally quantified using the `for` clause[^tyty1]. Those lifetimes are not resolved when the definition is analyzed but only when this type is used. Hence, the name is "late-bound" lifetimes. In addition, there is a representation for unresolved lifetimes. It is used, for example, when a generic type is defined, but the generic arguments have not been provided yet. Any occurrence of an unresolved lifetime after type checking it to be treated as a compiler bug.
+
+[^tyty1]: `for<'a> fn(&'a i32) -> &'a i32`
+
+Inside TyTy, lifetimes are represented in the following ways. Named lifetimes are enumerated. Anonymous lifetimes are assumed to be always distinct (but they are represented the same at this stage). Early bound lifetimes are represented by the relative position of the lifetime parameter it is bound to. In generic types, the lifetime arguments are stored together with the type arguments, which ensures their automatic propagation. One issue with this automatic propagation is that the bindings of early bound lifetimes are updated. That means that by a simple inspection of the body of the generic type, one would not be able to resolve the lifetimes. This is resolved by a trick. Each TyTy type is identified by an id. When generic arguments are substituted, a clone of the type with a fresh id is created. What we would like to achieve is to have the same state that is in rustc: the original body and up-to-date list of generic arguments. This can be achieved by storing the id of the original type in addition to the current id, and it can be looked up when needed[^dream]. The analysis can then traverse the original type, and when a type placeholder is encountered, the appropriate argument is looked up in the current type.
+
+[^dream]: This was once revealed to me in a dream.
 
 ## Borrow-checker IR Design
 
 The borrow-checker IR (BIR) is a three-address code representation designed to be close to a subset of rustc's MIR. Same as MIR, it represents the body of a single function (or other function-like item, e.g., a closure) since borrow-checking is performed on each function separately. It ignores particular operations and merges them into a few abstract operations focusing on data flow.
 
-```
+```rust
     fn fib(_1: usize) -> i32 {
         bb0: {
             _4 = Operator(_1, const usize);
@@ -503,7 +508,7 @@ The BIR fact collection extracts the Polonius facts from the BIR and performs ad
 The fact collection is performed in two phases. First, static facts are collected from the place database. Those include copying of universal region constraints (constraints corresponding to lifetime parameters of the function)
 Moreover, collected facts from the place database. Polonius needs to know which places correspond to variables and which form paths (see definition below). Furthermore, it needs to sanitize fresh regions of places that are related (e.g., a field and a parent variable) by adding appropriate constraints between them. Relations of the region depend on the variance of the region within the type. (See Variance Analysis below.)
 
-```
+```c
     Path = Variable
          | Path "." Field // field access
          | Path "[" "]"   // index
@@ -523,7 +528,7 @@ Let us make an example. In the example, we need to infer the type of x, such tha
 
 [^var1]: Loan is the result of borrow operation.
 
-```
+```rust
     let mut x;
     if (b) {
         x = a; // a: &'a T
@@ -620,20 +625,6 @@ Once all types in the crate are processed, the constraints are solved using a fi
     - `f1` stayed bivariant, because it was not mentioned in the type,
     - `f2` is invariant, because it s is used in both covariant and contravariant position.
 
-## Representation of Lifetimes in TyTy
-
-> The term _lifetime_ is used in this work to refer to the syntactic object in HIR and AST. In the source code it corresponds to either explicit universal[^lifetimes] lifetime annotation (`'a`), elided universal lifetime annotation[@reference](https://doc.rust-lang.org/reference/lifetime-elision.html), and local/existential[^lifetimes] lifetimes, which are always inferred. In contrast, _region_/_origin_ is used to refer to the semantic object. The object is in fact an inference variable, and its value is computed by the borrow-checker. The term _region_ is used by NLL to referer to a set of CFG points. Polonius introduced the term _origin_ to refer to a set of _loans_. In this text and the implementation, we use the two terms interchangeably.
-
-[^lifetimes]: There are two kinds of lifetimes in Rust semantics: universal and existential. Universal lifetimes corresponds to code that happens outside the function. It is called universal, because in the borrow-checker rules, it is universally quantified. That means that the function has to be valid _for all_ possible outside code that satisfies the specified (or implied) constraints. Existential lifetimes corresponds to code that happens inside the function. It is called existential, because in the borrow-checker rules, it is existentially quantified. That means that the code has to be valid _for some_ set of _loans_ (or CFG points). [TODO: should this be here?]
-
-In order to analyze more complex lifetimes than just simple references, it was necessary to add representation of lifetime parameters to the type system and unify it with the representation of lifetimes in the rest of the compiler. The first step is to resolve the lifetimes and bind them to their bounding clauses. Gccrs recognizes four kinds of regions. In a function body, explicit lifetimes annotations result in "named" lifetime and implicit lifetimes annotations result in "anonymous" lifetimes. Within generic data types lifetimes resolved to lifetime parameters are called "early-bound." For function pointers and traits, lifetimes can be universally quantified using the `for` clause[^tyty1]. Those lifetimes are not resolved when the definition is analyzed but only when this type is used. Hence, the name is "late-bound" lifetimes. In addition, there is a representation for unresolved lifetimes. It is used, for example, when a generic type is defined, but the generic arguments have not been provided yet. Any occurrence of an unresolved lifetime after type checking it to be treated as a compiler bug.
-
-[^tyty1]: `for<'a> fn(&'a i32) -> &'a i32`
-
-Inside TyTy, lifetimes are represented in the following ways. Named lifetimes are enumerated. Anonymous lifetimes are assumed to be always distinct (but they are represented the same at this stage). Early bound lifetimes are represented by the relative position of the lifetime parameter it is bound to. In generic types, the lifetime arguments are stored together with the type arguments, which ensures their automatic propagation. One issue with this automatic propagation is that the bindings of early bound lifetimes are updated. That means that by a simple inspection of the body of the generic type, one would not be able to resolve the lifetimes. This is resolved by a trick. Each TyTy type is identified by an id. When generic arguments are substituted, a clone of the type with a fresh id is created. What we would like to achieve is to have the same state that is in rustc: the original body and up-to-date list of generic arguments. This can be achieved by storing the id of the original type in addition to the current id, and it can be looked up when needed[^dream]. The analysis can then traverse the original type, and when a type placeholder is encountered, the appropriate argument is looked up in the current type.
-
-[^dream]: This was once revealed to me in a dream.
-
 ## Error Reporting
 
 [_**TODO** this is kinda mixed with the next chapter_]
@@ -687,27 +678,27 @@ The resolution of named lifetimes to their binding clauses was added. `TyTy` typ
 ::: {#refs}
 :::
 
-#                                      
+\appendix
 
-# Appendix A: AST Dump Example
+## Appendix A: AST Dump Example
 
 ```rust
 // TODO need to figure out fot ti fit in nicely in the pdf
 ```
 
-# Appendix B: HIR Dump Example
+## Appendix B: HIR Dump Example
 
 ```rust
 // TODO
 ```
 
-# Appendix C: BIR Dump Example
+## Appendix C: BIR Dump Example
 
 ```rust
 // TODO
 ```
 
-# Appendix D: Examples of Caught Errors
+## Appendix D: Examples of Caught Errors
 
 ```rust
 // TODO
