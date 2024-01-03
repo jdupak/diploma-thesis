@@ -4,7 +4,7 @@
 \usepackage{titlesec}
 \usepackage{changepage}
 \usepackage[most]{tcolorbox}
-\newtcolorbox[auto counter, number within=chapter]{myquote}{colframe=white!0!white, arc=0.2mm float, enhanced}
+\newtcolorbox{myquote}{colframe=white!0!white, arc=0.2mm, float}
 \renewenvironment{quote}{\begin{myquote}}{\end{myquote}}
 \titleformat{\chapter}[display]{\normalfont\LARGE\bfseries}{\chaptertitlename\ \thechapter}{-5pt}{\huge}
 \titlespacing*{\chapter}{0pt}{20pt}{20pt}
@@ -33,9 +33,5 @@
 \fancyhead[LO]{\textcolor{gray}{\sffamily{\leftmark}}}
 \fancyhead[RE]{\textcolor{gray}{\sffamily{\rightmark}}}
 \fancyfoot[C]{\thepage}
-
-%\makeatletter
-%\let\NAT@parse\undefined
-%\makeatother
 
 \usepackage[unicode=true]{hyperref}
