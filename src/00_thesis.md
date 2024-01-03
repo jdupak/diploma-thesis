@@ -70,7 +70,7 @@ header-includes:
   - \Supervisor{Ing. Pavel Píša Ph.D. \vskip 1mm Arthur Cohen}
 include-before:
   - \pagenumbering{roman}
-  - \includepdf[pages=-]{Thesis_Assignment_Jakub_Dupák_Memory_safety_analysis_in_Rust_GCC.pdf}
+  - \includepdf[pages=-]{src/Thesis_Assignment_Jakub_Dupák_Memory_safety_analysis_in_Rust_GCC.pdf}
   - \ack{"TODO"}
   - \declaration
   - \abstract{"xx"}{"xx"}
