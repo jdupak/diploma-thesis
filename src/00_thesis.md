@@ -3,8 +3,11 @@ title: "Memory Safety Analysis in Rust GCC"
 author: "Jakub Dupák"
 date: "January 2024"
 
-classoption: twoside,symmetric
-fontsize: "11pt"
+lang: en
+link-citations: true
+link-bibliography: true
+nocite: "@*"
+classoption: twoside,symmetric fontsize: "11pt"
 mainfont: "Latin Modern Roman"
 mainfontoptions:
 - BoldFont=Technika-Regular
@@ -632,14 +635,14 @@ The final stage of the borrow-checker development would be to implement heuristi
 
 # Implementation
 
-The goal of this project was to implement a prototype of a Polonius-based borrow-checker for Rustc GCC and to explore the feasibility of the approach and provide code infrastructure for further development. The project was implemented in [personal fork](https://github.com/jdupak/gccrs/) and stabilized parts are being submitted to the main [Rustc GCC GitHub repository](https://github.com/Rust-GCC/gccrs) using pull requests. All accepted changes are scheduled to be included in the [central GCC repository](https://gcc.gnu.org/git/) by the maintainers of Rust CGG.
+The goal of this project was to implement a prototype of a Polonius-based borrow-checker for Rustc GCC and to explore the feasibility of the approach and provide code infrastructure for further development. The project was implemented in a [personal fork](https://github.com/jdupak/gccrs/) and stabilized parts are being submitted to the main [Rustc GCC GitHub repository](https://github.com/Rust-GCC/gccrs) using pull requests. All accepted changes are scheduled to be included in the [central GCC repository](https://gcc.gnu.org/git/) by the maintainers of Rust CGG with the help of the author.
 
 After initial experiments described in chapter [5.1](#analysis-of-the-fact-collection-problem), the project was implemented in the following phases: First, an initial version of the borrow-checker IR, lowering from HIR to BIR (the BIR builder), and textual BIR dump were implemented. Second, a first version BIR fact collection and the Polonius FFI was implemented. At this stage, first simple error detections were tested. Next, the model had to be extended to handle more complex data types. This change included modification of parsing and subsequent lowering, modification of type representation to handle lifetimes (regions), and implementation of the variance analysis. The BIR builder had to be extended to take advantage of the full lifetime (region) information. Finally, the BIR fact collection was extended to handle the new information and emit all the available facts.
 
 The initial version of the borrow-checker included only the minimal possible information that the borrow-checker was expected to need. The builder was able to lower the most operator and initializer expressions, borrow expressions, function calls, and simple control flow operations (`if`, `if/else`, `while`, `loop`, `return`). The while compiler was [extended](https://github.com/Rust-GCC/gccrs/pull/2689) to handle [labelled blocks](https://doc.rust-lang.org/reference/expressions/loop-expr.html#labelled-block-expressions) to be able to lower (and test) `break` and `continue` expressions. Note that in the Rustc language, `break` and `continue` can be used with a label to break out of a nested loop, and it can be used to 'return' value of any block[@reference]. The BIR dump was designed to be as similar to MIR as possible to allow for manual verification of the BIR. This part turned out to have some issues because rustc performs many transformations of MIR, and there are many versions of the dump available. Originally, the dump from the online [Compiler Explorer](https://godbolt.org/) was used as it was easily available. However, this version of MIR is optimized and cleaned up. It was very complicated to keep up with this dump, as it required some additional transformation of the BIR. This led to a change of the reference MIR dump. MIR after each MIR pass can be exported from rustc using the flag `-Zdump-mir=*`. In addition, there is also the option `-Zunpretty=mir`. Logical choose was to continue with the MIR version used for borrow-checking (`-Zdump-mir=nll`). This version is not very optimized and contains additional information for borrow-checking. Most of the BIR transformations had to be removed after this change of the reference MIR dump. This initial version of BIR and related infrastructure was submitted to Rust GCC in [pull request 2702](https://github.com/Rust-GCC/gccrs/pull/2702). This PR added 3,779 lines of new code. This included a document called "BIR Design Notes" that was written to help new developers to get familiar with the borrow-checker implementation. It can be found in the file [
 gcc/rust/checks/errors/borrowck/bir-design-notes.md](https://github.com/Rust-GCC/gccrs/blob/df5b6a371dba385e4bb03ebd638cd473c4cc38eb/gcc/rust/checks/errors/borrowck/bir-design-notes.md).
 
-In the second phase, the fact collection and an interface to the Polonius engine were implemented. At this stage, only a lifetimes of simple references were handled (at most one lifetime at a time). Fact collection processed all the places in the place database and walks the BIR control-flow graphs. The interface to Polonius consists of a C ABI in gccrs, C ABI generated by [rust-binding](https://github.com/rust-lang/rust-bindgen) and manually cleaned up and extended, and a small static library in Rust, which invokes Polonius. A discussion about integration of this interface into GCC build system was started in [pull request draft 2716](https://github.com/Rust-GCC/gccrs/pull/2716). This problem is very complicated, because it requires compilation of Rustc code, which is beyond the capabilities of Rustc GCC. For development purposes, the Cargo build system (rustc) is invoked from the GCC Makefile. This is not a viable solution for production, because it does not handle cross-compilation and it requires the user to have Rustc installed. However, this solution is the best for developer experience. It was decided that for the time being the build integration will be kept downstream. The most viable solution for upstreaming is to release the Polonius FFI as a dynamic library and keep its building outside of GCC. Final decision will be made when the borrow-checker is ready for public release. For this reason, this phase was not submitted to Rust GCC. Newer commits are rebased bellow the FFI commit and submited separately. At this stage, the borrow-checker successfully detected [repeated moves](https://doc.rust-lang.org/error_codes/E0382.html), basic subset errors (insufficient constraints between inputs and outputs of the function were specified) and [move behind reference](https://doc.rust-lang.org/error_codes/E0507.html). At this stage, error output was implemented using only the debug output from FFI Polonius/
+In the second phase, the fact collection and an interface to the Polonius engine were implemented. At this stage, only a lifetimes of simple references were handled (at most one lifetime at a time). Fact collection processed all the places in the place database and walks the BIR control-flow graphs. The interface to Polonius consists of a C ABI in gccrs, C ABI generated by [rust-binding](https://github.com/rust-lang/rust-bindgen) and manually cleaned up and extended, and a small static library in Rust, which invokes Polonius. A discussion about the integration of this interface into the GCC build system was started in [pull request draft 2716](https://github.com/Rust-GCC/gccrs/pull/2716). This problem is very complicated because it requires compilation of Rustc code, which is beyond the capabilities of Rustc GCC. For development purposes, the Cargo build system (rustc) is invoked from the GCC Makefile. This is not a viable solution for production because it does not handle cross-compilation, and it requires the user to have Rustc installed. However, this solution is the best for developer experience. It was decided that for the time being, the build integration will be kept downstream. The most viable solution for upstreaming is to release the Polonius FFI as a dynamic library and keep its building outside of GCC. Final decision will be made when the borrow-checker is ready for public release. For this reason, this phase was not submitted to Rust GCC. Newer commits are rebased bellow the FFI commit and committed separately. At this stage, the borrow-checker successfully detected [repeated moves](https://doc.rust-lang.org/error_codes/E0382.html), basic subset errors (insufficient constraints between inputs and outputs of the function were specified) and [move behind reference](https://doc.rust-lang.org/error_codes/E0507.html). At this stage, error output was implemented using only the debug output from FFI Polonius.
 
 > ```
 > [34/35] Checking function test_move
@@ -659,55 +662,52 @@ In the second phase, the fact collection and an interface to the Polonius engine
 > \
 > **Example:** FFI Polonius debug output for a simple program with a move error.
 
-*
+In the third phase, the whole borrow-checker had to be extended to support complex types with multiple lifetimes (reins). Parsing and subsequent lowering were expected to handle lifetime annotation correctly. The TyTy IR and type checker were extended to store regions for each type. Variance analysis and helper region tools were implemented. The BIR builder was extended to handle all expressions and statements.
 
-*TODO
-**
+In the third phase, most of the borrow-checking rules were covered by the fact collector. One significant exception is handling of unwinding and drops, which is not implemented in the whole compiler. The borrow-checker can find most error violating the access rules (number of allowed loans)
 
-This section describes the current state of the borrow checker. As explained in the introduction, this work was experimental, and it focused on exploring as many aspects of the problem as possible. Given the complexity of the Rust language and the borrow-checking itself, there are many parts of the borrow-borrow checker that have not been implemented or have been implemented using a temporary solution.
+At this stage or Rust GCC, most of the test suite used by rustc to check its borrow-checker is incompatible, because it uses the Rust standard library, which gccrs is unable to compile.
 
-This project has demonstrated the feasibility of the selected approach and mapped the work necessary to create a production-ready solution. It has designed the infrastructure needed to solve the problem as the unimplemented parts are mostly technical.
+## Limitations
 
-## Kind of Detected Errors
+The main bottleneck of the current implementation is the BIR builder. After covering a subset of Rust that is sufficient to form enough examples to test the error detection capability, this work focused on other parts of the borrow-checker to implement all necessary parts, even in limited fashion. The builder currently only processes non-generic functions. Generic functions and closures are not supported. The builder does not handle all expressions and statements. Following is a list of known limitations.
 
-## Parsing
+### BIR and BIR Builder
 
-Parsing handles both explicit and implicit lifetimes correctly.
+- Only non-generic functions (not closures or [associated functions and methods](https://doc.rust-lang.org/nightly/reference/items/associated-items.html#associated-functions-and-methods)) are currently supported. They require a special top level handling. Handling of the body is identical (generic functions need to be monomorphised before checking).
+- Method calls are not handled due to implicit coercion of the `self` argument.
+- Operator `?` and `while let` are not handled. They are planned to be removed from HIR and desugared on the ATS->HIR boundary,
+- `if let` and `match` expressions are not handled due to missing handling for pattern detection (selection of the variant). Pattern destructuring is mostly implemented and used in `let` and for arguments. Alternating pattern is not handled. Declaration of pattern without initial value is not supported except of identifier expression.
+- Enums are not handled.
+- Unsafe blocks are no handled.
+- Asynchronous code is completely unsupported in the compiler.
+- Unwind paths (drops) are not created. Drops are not supported in the compiler.
+- [Two place borrowing](https://rustc-dev-guide.rust-lang.org/borrow_check/two_phase_borrows.html) is not implemented. This is not needed for correctness, but it reduced false positives of the borrow-checker.
+- Location information is not stored. This is necessary for practical error reporting.
+- Copy trait probing is not performed. Copy trait is only derived for primitive types and tuples of primitive types.
+- Not all fake operations are represented and emmited. For example, `fake_unwind`.
 
-Parsing of special lifetimes (`'static` and `'_`) was fixed. Handling of implicit lifetimes was added.
+### Parsing, AST, HIR, TyTy
 
-## AST to HIR Lowering
+- [Lifetime elision](https://doc.rust-lang.org/nightly/reference/lifetime-elision.html#lifetime-elision) is not handled.
+- Variance analysis does not import and export variance information using the metadata export. Currently, the analysis only considers one crate.
+- Region propagation in the type checker needs more testing. Especially cases regarding traits.
 
-## Type Checking (TyTy Representation)
+### Fact Collection
 
-The resolution of named lifetimes to their binding clauses was added. `TyTy` types were refactored from the usage of named lifetimes to resolved regions. Previously, the handling of lifetimes in generic types was completely missing, and the representation of regions inside generic types was added. Also, a mechanism to map original types to substituted ones, preserving information about parameter position, was added.
+Fact collection is a very complicated subject because there is very little documentation to the facts and their relation to Rust code. The current implementation is based in the Polonius Book[@polonius], Polonius source code[@poloniusSource], the rustc source code[@rustcSource], and reverse engineering using rustc and Polonius CLI. It is probable that some facts are missing or incorrectly collected. The following list contains known limitations.
 
-## Borrow-checker Scheduling
+- Implicit constraint between a reference and its base type (`&'a T => T: 'a`) is not collected.
+- Issuing of `loan_killed_at` is simplified.
+- Drop and unwind related handing is not implemented due to incomplete support in other parts of the borrow-checker.
+- [Two place borrowing](https://rustc-dev-guide.rust-lang.org/borrow_check/two_phase_borrows.html) is not implemented. See the BIR builder [section](#bir-builder).
+- The Reason for loan invalidation is not stored. This is necessary for practical error reporting.
+- Rustc stores priority for subset facts to display more relevant errors. This is not implemented in gccrs.
 
-All top-level functions which are
+### Polonius FFI and Error Reporting
 
-## BIR Building
-
-The BIR builder can handle
-
-The following constructs are not handled by the BIR builder and should be removed from HIR and desugared on the AST->HIR boundary: `ErrorPropagationExpr` (question mark operator), `WhileLetExpr`. Other constructs requiring pattern matching (`MatchExpr`, `IfLetExpr`, `IfLetConseqElse`) are not implemented. They require pattern validation to be implemented in BIR. Pattern destructuring is implemented except for the `AltPattern` (not supported by the rest of the compiler). Pattern destruction when no initial expression is provided is partly implemented (this construct is almost useless, and therefore, it has little priority).
-
-### BIR Dump
-
-The BIR dump can display the BIR in a fashion very similar to MIR. It performs some transformation, like place renumbering, to produce a result closer to MIR. Those transformations can be easily turned off in the code. In addition to MIR, statement numbers within basic blocks is displayed to simplify debugging. All BIR constructs are supported.
-
-Examples of BIR dump and MIR dump of the same program can be found in the appendix.
-
-## BIR Fact Collection
-
-## Polonius FFI
-
-Interface with Polonius is realized using C ABI implemented in gccrs and a in a Rust crate "ffi-polonius"
-
-## Error Reporting
-
-The borrow-checker report detected errors on the function level. It differentiates three kinds of errors: general loan errors, which are triggered by loan invalidations; subset errors, when insufficient constraints are specified; and move errors, following from possible use of uninitialized/deinitialized variables. Debug output can be used to link the error to BIR objects.
-
-Further work is needed to transfer violated facts from Polonius to gccrs, translate them to source code locations, and figure out the reasons for those errors. Rustc also sorts the errors based on the reason priority to display only the useful ones to the user. For example, errors on temporary variables created by the compiler have very low priority.
+- Current integration to the build system is not viable for production. See the [section](#implementation) about the build system. The Final solution for FFI Polonius integrations will be decided when the borrow-checker is ready for public release.
+- Only information about violation presence is passed back to the compiler -- no information about the violation itself is passed back.
+- Errors are reported only on function level (and using debug output). This can be problematic for automated testing, because the test might fail/succeed for the wrong reason.
 
 \appendix
