@@ -40,9 +40,10 @@ include-before:
   - \abstract{"xx"}{"xx"}
 ---
 
-\pagenumbering{arabic}
 
 # Introduction
+
+\pagenumbering{arabic}
 
 <!-- TODO: About Rust and GCCRS and borrow-checking importance -->
 
@@ -63,17 +64,11 @@ The Rust language builds on the RAII approach; however, it adds a built-in stati
 
 The key idea behind Rust memory safety is to strictly (using the type system) differentiate the two problematic cases: ownership transfers and borrows. Ownership transfer ties all owned unique resources to another object, detaching them from the current object. This operation is called "move" in Rust (and C++). Unlike C++, Rust does not allow objects to store a reference to themselves, simplifying the ownership transfer semantics to just a bitwise copy. Rust static analysis also ensures that the old object is not used after it has been "moved from."
 
-Borrow is a temporary usage of an object without ownership transfer. A typical example is a method call. For borrows, Rust uses static analysis to ensure that the borrowed object cannot be deallocated while in use (in Rust terms, the borrowed object has to
-_outlive_ the borrow). However, since a whole program analysis would be very expensive, Rust performs the analysis only inside of a single function. It requires the programmer to formally describe the invariants of lifetimes (subsets of the program where each reference has to be valid) on a function boundary. The invariants are checked inside the function and assumed outside of the function, resulting in a safe program. The invariants are described using so-called lifetime annotations. The programmer can think about a lifetime annotation as an inference variable. The domain of the variable represents a subset of the program (set of lines, expressions control, or control flow graph nodes). The task of the borrow-checker is to resolve each inference variable to an actual subset of the program where the borrow is valid. This subset might not be unique. The existence of such a subset is sufficient to prove that the program is safe.
+Borrow is a temporary usage of an object without ownership transfer. A typical example is a method call. For borrows, Rust uses static analysis to ensure that the borrowed object cannot be deallocated while in use (in Rust terms, the borrowed object has to _outlive_ the borrow). However, since a whole program analysis would be very expensive, Rust performs the analysis only inside of a single function. It requires the programmer to formally describe the invariants of lifetimes (subsets of the program where each reference has to be valid) on a function boundary. The invariants are checked inside the function and assumed outside of the function, resulting in a safe program. The invariants are described using so-called lifetime annotations. The programmer can think about a lifetime annotation as an inference variable. The domain of the variable represents a subset of the program (set of lines, expressions control, or control flow graph nodes). The task of the borrow-checker is to resolve each inference variable to an actual subset of the program where the borrow is valid. This subset might not be unique. The existence of such a subset is sufficient to prove that the program is safe.
 
 The annotations are related to each other by "outlives" relations, requiring one reference lifetime to be a subset of another lifetime. These constraints are used to describe the relationship of the inputs and outputs of a function, providing a simplified, conservative description of all the relevant code outside of the function.
 
->
-
-*
-
-*Example
-**: We have a vector-like structure (a dynamic array), and we want to store references to integers as elements. We need to make sure that as long as the vector exists, all references stored in it are valid. However, we do not want the vector to own the integers. First, we introduce a lifetime parameter `'a`, which represents all the regions where the vector itself is alive. This parameter will be substituted at a particular use site with a concrete lifetime.
+> **Example**: We have a vector-like structure (a dynamic array), and we want to store references to integers as elements. We need to make sure that as long as the vector exists, all references stored in it are valid. However, we do not want the vector to own the integers. First, we introduce a lifetime parameter `'a`, which represents all the regions where the vector itself is alive. This parameter will be substituted at a particular use site with a concrete lifetime.
 >
 > ```rust
 > struct Vec<'a> { ... }
@@ -181,56 +176,17 @@ In the previous chapter, we have mentioned that Polonius differs from NLL in its
 >     };
 > ```
 >
->
-
-*
-
-*Example:
-**
-_The
-origin
-of
-the
-reference `r` (
-denoted
-as `'0`)
-is
-the
-set
-of
-loans `L0`
-and `L1`.
-Note
-that
-this
-fact
-is
-initially
-unknown,
-and
-it
-is
-the
-task
-of
-the
-analysis
-to
-compute
-it._
+> **Example:** _The origin of the reference `r` (denoted as `'0`) is the set of loans `L0` and `L1`. Note that this fact is initially unknown, and it is the task of the analysis to compute it._
 
 The engine first preprocesses the input facts. It computes transitive closures of relations and analyzes all the initialization and deinitializations that happen over the CFG. Then, it checks for move errors, i.e., when ownership of some object is transferred more than once. In the next step, the liveness of variables and the "outlives" graph (transitive constraints of lifetimes at each CFG point) are computed[@polonius2]. All origins that appear in the type of live variable are considered live.
 
 [^pol1]: A contiguous growable array type from the Rust standard library. ([https://doc.rust-lang.org/std/vec/struct.Vec.html](https://doc.rust-lang.org/std/vec/struct.Vec.html))
 
-Then Polonius needs to figure out
-_active
-loans_. A loan is active at a CFG point if two conditions hold. Any origin that contains the loan is live (i.e., there is a variable that might reference it), and the variable/place referencing the loan was not reassigned. (When a reference variable is reassigned, it points to something else.)
+Then Polonius needs to figure out _active loans_. A loan is active at a CFG point if two conditions hold. Any origin that contains the loan is live (i.e., there is a variable that might reference it), and the variable/place referencing the loan was not reassigned. (When a reference variable is reassigned, it points to something else.)
 
 The compiler has to specify all the points in the control flow graph where a loan being alive would violate the memory safety rules. Polonius then checks whether such a situation can happen. If it can, it reports the facts involved in the violation. For example, if a mutable loan of a variable is alive, then any read/write/borrow operation on the variable invalidates the loan.
 
-![Steps performed by Polonius to find error. The starting nodes correspond to
-_facts_ supplied to Polonius by the compiler. Inner nodes represent intermediate results produced by the analysis. Errors (at the bottom) are ultimately returned to the compiler. (The graphic was adapted from [@Stjerna2020].)](polonius.svg)
+![Steps performed by Polonius to find error. The starting nodes correspond to _facts_ supplied to Polonius by the compiler. Inner nodes represent intermediate results produced by the analysis. Errors (at the bottom) are ultimately returned to the compiler. (The graphic was adapted from [@Stjerna2020].)](polonius.svg)
 
 ## Polonius Facts
 
@@ -261,11 +217,7 @@ This section provides a list of facts taken by Polonius to give the reader a bet
 
 # Comparison of Internal Representations
 
-The execution of a borrow-checker with an external analysis engine consists of two steps. First, we need to collect the relevant information about the program. We will call that information
-_facts_[^cmp1]. Second, we need to send those facts to the external engine and process them. Before we can discuss the
-_collection_ of facts itself, we need to understand how programs are represented inside the compiler. We will use the term
-_internal
-representation_ (IR) to refer to the representation of the program inside the compiler. We will compare the IRs used by rustc and gccrs to highlight the differences between the two compilers. This will help us understand the challenges of adapting the borrow-checker design from rustc to gccrs. First, we will describe the IRs used by rustc, and then we will compare them with those used in gccrs.
+The execution of a borrow-checker with an external analysis engine consists of two steps. First, we need to collect the relevant information about the program. We will call that information _facts_[^cmp1]. Second, we need to send those facts to the external engine and process them. Before we can discuss the _collection_ of facts itself, we need to understand how programs are represented inside the compiler. We will use the term _internal representation_ (IR) to refer to the representation of the program inside the compiler. We will compare the IRs used by rustc and gccrs to highlight the differences between the two compilers. This will help us understand the challenges of adapting the borrow-checker design from rustc to gccrs. First, we will describe the IRs used by rustc, and then we will compare them with those used in gccrs.
 
 [^cmp1]: This follows the terminology used by Polonius[@polonius].
 
@@ -275,9 +227,7 @@ To understand the differences between each of the compilers, we must first explo
 
 The core of LLVM is a three-address code (3-AD)[^comp1] representation, called the LLVM intermediate representation (LLVM IR) [@llvm, llvm-ir]. This IR is the interface between front-ends and the compiler platform (the middle-end and the back-end). Each front-end is responsible for transforming its custom AST IR[^comp2] into the LLVM IR. The LLVM IR is stable and strictly separated from the front-end, hence it cannot be easily extended to include language-specific constructs.
 
-[^comp1]: Three-address code represents the program as sequences of statements (we call such sequence a
-*basic
-block*), connected by control flow instructions, forming a control flow graph (CFG).
+[^comp1]: Three-address code represents the program as sequences of statements (we call such sequence a *basic block*), connected by control flow instructions, forming a control flow graph (CFG).
 
 [^comp2]: Abstract syntax tree (AST) is a data structure used to represent the structure of the program. It is the direct product of program parsing. For example, an expression `1 + (2 - 7)` would be represented as a node `subtraction`, with the left child being the number one and the right child being the AST for the subexpression `(2 - 7)`.
 
@@ -287,9 +237,7 @@ GCC, on the other hand, interfaces with the front-ends using a tree-based repres
 
 [^gcc1]: "GIMPLE that is not fully lowered is known as “High GIMPLE” and consists of the IL before the `pass_lower_cf`. High GIMPLE contains some container statements like lexical scopes and nested expressions, while “Low GIMPLE” exposes all of the implicit jumps for control and exception expressions directly in the IL and EH region trees."[@gccint, p. 225]
 
-The key takeaway from this section is that rustc has to transform the tree-based representation into a 3-AD representation by itself. That means it can access the program's control flow graph (CFG). This is not the case for gccrs. In GCC, the CFG is only available in the
-_Low
-GIMPLE_ representation, deep inside the middle-end, where the representation is language independent.
+The key takeaway from this section is that rustc has to transform the tree-based representation into a 3-AD representation by itself. That means it can access the program's control flow graph (CFG). This is not the case for gccrs. In GCC, the CFG is only available in the _Low GIMPLE_ representation, deep inside the middle-end, where the representation is language independent.
 
 ## Rustc's Representation
 
@@ -315,14 +263,9 @@ org/reference/expressions/if-expr.html#if-let-expressions)
 > }
 > ```
 >
->
+> **Example:** This very simple code will be used as an example throughout this section.
 
-*
-
-*Example:
-** This very simple code will be used as an example throughout this section.
-
-> ```
+>```
 > Fn {
 >   generics: Generics { ... },
 >   sig: FnSig {
@@ -358,12 +301,7 @@ org/reference/expressions/if-expr.html#if-let-expressions)
 > }
 >```
 >
->
-
-*
-
-*Example:
-** This is a textual representation of a small and simplified part of the abstract syntax tree (AST) of the example program. The full version can be found in the [Appendix A](#appendix-a-ast-dump-example).
+> **Example:** This is a textual representation of a small and simplified part of the abstract syntax tree (AST) of the example program. The full version can be found in the [Appendix A](#appendix-a-ast-dump-example).
 
 HIR is the primary representation used for most rustc operations[@devguide, HIR]. It combines a simplified version of the AST with additional tables and maps for quick access to extra information. Those tables contain, for example, information about the types of expressions and statements. These tables are used for analysis passes, e.g., the full (late) name resolution and type checking. The type-checking process includes checking the type correctness of the program, type inference, and resolution of type-dependent implicit language constructs.[@devguide [^hir2]]
 
@@ -379,10 +317,7 @@ HIR is the primary representation used for most rustc operations[@devguide, HIR]
 >  fn foo(x: i32) -> Foo { Foo(x) }
 > ```
 >
->
-*
-*Example:
-** One of HIR dump formats: HIR structure still corresponds to a valid Rust program, equivalent to the original one. `rustc` provides a textual representation of HIR, which displays such a program.
+> **Example:** One of HIR dump formats: HIR structure still corresponds to a valid Rust program, equivalent to the original one. `rustc` provides a textual representation of HIR, which displays such a program.
 
 The HIR representation can contain many placeholders and "optional" fields that are resolved during the HIR analysis. To simplify further processing, parts of HIR that correspond to executable code (e.g., not type definitions) are transformed into THIR (Typed High-Level Intermediate Representation), where all the missing information must be resolved. The reader can think about HIR and THIR in terms of the [builder pattern](https://en.wikipedia.org/wiki/Builder_pattern). HIR provides a flexible interface for modification, while THIR is the final immutable representation of the program. This involves not only the data stored in HIR helper tables but also parts of the program that are implied from the type system. That means that operator overloading, automatic references, and automatic dereferences are all resolved into explicit code at this stage.
 
@@ -408,13 +343,8 @@ Inside the HIR, after the type-checking analysis, TyTy types of nodes can be loo
 >     }
 > }
 > ```
->
->
-
-*
-
-*Example:
-** MIR dump
+> 
+> **Example:** MIR dump
 > For further details, see the chapter "Source Code Representation" in [@devguide].
 
 ## Rust GCC representation
@@ -468,22 +398,12 @@ Before the borrow-checking itself can be performed, specific information about t
 
 [^bp1]: At least Rust semantics thinks about it that way. In reality, the compiler only checks that there exists some lifetime that could be used in that position by collecting constraints that would apply to such a lifetime and passing them to the borrow-checker.
 
+
 ## Representation of Lifetimes in TyTy
 
-> The term
-_lifetime_ is used in this work to refer to the syntactic object in HIR and AST. In the source code it corresponds to either explicit universal[^lifetimes] lifetime annotation (`'a`), elided universal lifetime annotation[@reference](https://doc.rust-lang.org/reference/lifetime-elision.html), and local/existential[^lifetimes] lifetimes, which are always inferred. In contrast,
-_region_/
-_origin_ is used to refer to the semantic object. The object is in fact an inference variable, and its value is computed by the borrow-checker. The term
-_region_ is used by NLL to referer to a set of CFG points. Polonius introduced the term
-_origin_ to refer to a set of
-_loans_. In this text and the implementation, we use the two terms interchangeably.
+> The term _lifetime_ is used in this work to refer to the syntactic object in HIR and AST. In the source code it corresponds to either explicit universal[^lifetimes] lifetime annotation (`'a`), elided universal lifetime annotation[@reference](https://doc.rust-lang.org/reference/lifetime-elision.html), and local/existential[^lifetimes] lifetimes, which are always inferred. In contrast, _region_/_origin_ is used to refer to the semantic object. The object is in fact an inference variable, and its value is computed by the borrow-checker. The term _region_ is used by NLL to referer to a set of CFG points. Polonius introduced the term _origin_ to refer to a set of _loans_. In this text and the implementation, we use the two terms interchangeably.
 
-[^lifetimes]: There are two kinds of lifetimes in Rust semantics: universal and existential. Universal lifetimes correspond to code that happens outside the function. It is called universal because the concerned borrow-checking rules use the universal quantifier. That means that the function has to be valid
-_for
-all_ possible outside code that satisfies the specified (or implied) constraints. Existential lifetimes correspond to code that happens inside the function. The existential quantifier is used in the rules regarding existential lifetimes. That means that the code has to be valid
-_for
-some_ set of
-_loans_ (or CFG points).
+[^lifetimes]: There are two kinds of lifetimes in Rust semantics: universal and existential. Universal lifetimes correspond to code that happens outside the function. It is called universal because the concerned borrow-checking rules use the universal quantifier. That means that the function has to be valid _for all_ possible outside code that satisfies the specified (or implied) constraints. Existential lifetimes correspond to code that happens inside the function. The existential quantifier is used in the rules regarding existential lifetimes. That means that the code has to be valid _for some_ set of _loans_ (or CFG points).
 
 In order to analyze more complex lifetimes than just simple references, it was necessary to add representation of lifetime parameters to the type system and unify it with the representation of lifetimes in the rest of the compiler. The first step is to resolve the lifetimes and bind them to their bounding clauses. Gccrs recognizes four kinds of regions. In a function body, explicit lifetimes annotations result in "named" lifetime and implicit lifetimes annotations result in "anonymous" lifetimes. Within generic data types lifetimes resolved to lifetime parameters are called "early-bound." For function pointers and traits, lifetimes can be universally quantified using the `for` clause[^tyty1]. Those lifetimes are not resolved when the definition is analyzed but only when this type is used. Hence, the name is "late-bound" lifetimes. In addition, there is a representation for unresolved lifetimes. It is used, for example, when a generic type is defined, but the generic arguments have not been provided yet. Any occurrence of an unresolved lifetime after type checking it to be treated as a compiler bug.
 
@@ -525,15 +445,8 @@ The borrow-checker IR (BIR) is a three-address code representation designed to b
 > ```
 
 >
->
-
-*
-
-*Example:
-** A shortened example of a BIR dump of a simple Rust program. The program computes the n-th Fibonacci number.
-> The source code, full dump, and legend can be found in [
-_appendix
-C_](#appendix-c-bir-dump-example).
+> **Example:** A shortened example of a BIR dump of a simple Rust program. The program computes the n-th Fibonacci number.
+> The source code, full dump, and legend can be found in [_appendix C_](#appendix-c-bir-dump-example).
 > This example comes from the "BIR Design Notes" document, which is part of the source tree and which provides an introduction to developers getting familiar with the basic aspects of the borrow-checker implementation.
 
 The BIR of a single function is composed of basic metadata about the function (such as arguments, return type, or explicit lifetimes), a list of basic blocks, and a list of places.
@@ -548,22 +461,12 @@ Places are identified by the index in the place database. The database stores a 
 
 It is important to highlight that different fields are assigned to different places; however, all indices are assigned to the same place (both in gccrs and rustc). This fact has a strong impact on the strength and complexity of the analysis; since the number of fields is static and typically small, the size of arrays is unbound and depends on runtime information.
 
->
-
-*
-
-*Structure of BIR Function
-**
->
+> **Structure of BIR Function**
+> 
 > - basic block list
-    >
-
-- `Statement`
-  >
-- `Assignment`
-  >
-- `InitializerExpr`
-
+>  - `Statement`
+>    - `Assignment`
+>      - `InitializerExpr`
 >      - `Operator<ARITY>`
 >      - `BorrowExpr`
 >      - `AssignmentExpr` (copy)
@@ -604,19 +507,14 @@ The fact collection is performed in two phases. First, static facts are collecte
 >      | Path "[" "]"   // index
 >      | "*" Path
 > ```
->
+> 
 > Formal definition of paths from the Polonius book[@polonius].
 
 In the second phase, the BIR is traversed along the CFG, and dynamic facts are collected. For each statement, two CFG nodes are added. Two nodes are needed to model the parts of semantics where the statement takes effect immediately or after the statement is executed. For each statement and (if present) its expression, Polonius facts are collected. Those include generic facts related to read and write operations, as well as facts specific to borrows and function calls. For the function, we need to instantiate fresh regions for the function's lifetime parameters, which need to be correctly bound together.
 
 ### Subtyping and Variance
 
-In the basic interpretation of Rust language semantics (one used by programmers to reason about their code, not the one used by the compiler), lifetimes are part of the type and are always present. If a lifetime is not mentioned in the program explicitly, it is inferred the same way as a part of type would be (e.g., `let a = (_, i32) = (true, 5);` completes the type to `(bool, i32)`) Note that it is actually impossible to write those lifetimes. In the Rust program, all explicit lifetime annotations correspond to any borrow that happened
-
-*
-
-*outside
-** the function, and therefore, it is alive for the whole body of the function. Explicit lifetime annotations corresponding to regions spanning only a part of the function body would be pointless. Borrows inside a function can be analysed precisely by the borrow-checker. Explicit annotations are only used to represent constraints following from the code that the borrow-checker cannot see.
+In the basic interpretation of Rust language semantics (one used by programmers to reason about their code, not the one used by the compiler), lifetimes are part of the type and are always present. If a lifetime is not mentioned in the program explicitly, it is inferred the same way as a part of type would be (e.g., `let a = (_, i32) = (true, 5);` completes the type to `(bool, i32)`) Note that it is actually impossible to write those lifetimes. In the Rust program, all explicit lifetime annotations correspond to any borrow that happened **outside** the function, and therefore, it is alive for the whole body of the function. Explicit lifetime annotations corresponding to regions spanning only a part of the function body would be pointless. Borrows inside a function can be analysed precisely by the borrow-checker. Explicit annotations are only used to represent constraints following from the code that the borrow-checker cannot see.
 
 > ```rust
 >  let mut x;
@@ -627,12 +525,7 @@ In the basic interpretation of Rust language semantics (one used by programmers 
 >  }
 > ```
 >
->
-
-*
-
-*Example:
-** We need to infer the type of x, such that it is a subtype of both `&'a T` and `&'b T`. We need to make sure that if we further use x, that is safe with regard to all loans that it can contain (here `a` or `b`).
+> **Example:** We need to infer the type of x, such that it is a subtype of both `&'a T` and `&'b T`. We need to make sure that if we further use x, that is safe with regard to all loans that it can contain (here `a` or `b`).
 
 In Rust, unlike in object-oriented languages like Java or C++, the only subtyping relation other than identity is caused by lifetimes[^var3]. Two regions (corresponding to lifetimes) can be either unrelated, a subset of each other (in terms of a set of CFG nodes) (denoted `'a: 'b`), or equal (typically a result of `'a: 'b` and `'b: 'a`). The dependency of subtyping on the inner parameter is called variance.
 
@@ -666,8 +559,7 @@ Let us look at that visually. In the following code, we have region `'a`, where 
 
 The return type of the function is effectively an assignment to a local variable (just across function boundaries) and, therefore, is covariant.
 
-The situation gets interesting when the two rules are combined. Let us have a function `fn foo<'a>(x: &'a T) -> &'a T`. The return type requires the function to be covariant over `'a`, while the parameter requires it to be contravariant. This is called
-*invariance*.
+The situation gets interesting when the two rules are combined. Let us have a function `fn foo<'a>(x: &'a T) -> &'a T`. The return type requires the function to be covariant over `'a`, while the parameter requires it to be contravariant. This is called *invariance*.
 
 For non-generic types, its variance immediately follows from the type definition. For generic types, the situation is more complex.
 
@@ -688,12 +580,7 @@ The visitor traverses each type with the current variance of the visited express
 
 Once all types in the crate are processed, the constraints are solved using a fixed-point computation. Note that the current crate can use generic types from other crates, and therefore, it has to export/load the variance of public types.
 
->
-
-*
-
-*Example of Algorithm Execution
-**
+> **Example of Algorithm Execution**
 >
 > ```rust
 >  struct Foo<'a, 'b, T> {
@@ -701,48 +588,30 @@ Once all types in the crate are processed, the constraints are solved using a fi
 >      y: Bar<T>,
 >  }
 > ```
->
+> 
 > - Struct foo has three generic parameters, leading to 3 variables. `f0=o`, `f1=o` and `f2=o`.
 > - `x` is processed first, in covariant position.
-    >
-
-- `&'a T` is in covariant position, therefore variables are updated to `f0=+` and `f2=+`.
-
+>  - `&'a T` is in covariant position, therefore variables are updated to `f0=+` and `f2=+`.
 > - `y` is processed second, in covariant position.
-    >
-
-- `Bar<T>` is in covariant position.
-  >
-- `T` is inside a generic argument, therefore, its position is computed as a term `transform(+, b0)`.
-  >
-- New constant `f2 = join(f2, transform(+, b0))` is added.
-
+>  - `Bar<T>` is in covariant position.
+>      - `T` is inside a generic argument, therefore, its position is computed as a term `transform(+, b0)`.
+>          - New constant `f2 = join(f2, transform(+, b0))` is added.
 > - All types are processed. Let us assume that `Bar` is an external type with variances `[-]`  Now a fixed-point computation is performed.
-    >
-
-- Iteration 1:
-  >
-- Current values are `f0=+`, `f1=o` and `f2=+`
-
+>  - Iteration 1:
+>      - Current values are `f0=+`, `f1=o` and `f2=+`
 >      - Processing constraint `f2 = join(f2, transform(+, b0))`
 >      - `transform(+, b0)` where `b0=-` yields `-`
 >      - `join(+, -)` yields `*`
 >      - `f2` is updated, therefore, another iteration is needed.
 >  - Iteration 2:
-     >
-
-- Current values are `f0=+`, `f1=o` and `f2=*`
-
+>      - Current values are `f0=+`, `f1=o` and `f2=*`
 >      - Processing constraint `f2 = join(f2, transform(+, b0))`
 >      - `transform(+, b0)` where `b0=-` yields `-`
 >      - `join(*, -)` yields `*`
 >      - `f2` is not updated, therefore, the computation is finished.
 > - The final variance is `f0=+`, `f1=o` and `f2=*`:
-    >
-
-- `f0` is evident,
-
-> - `f1` stayed bivariant, because it was not mentioned in the type,
+>  - `f0` is evident,
+>  - `f1` stayed bivariant, because it was not mentioned in the type,
 >  - `f2` is invariant, because it s is used in both covariant and contravariant position.
 
 ## Error Reporting
