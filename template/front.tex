@@ -1,0 +1,89 @@
+\usepackage{titling}
+
+% Information about the school - can be dynamically changed through options
+\newcommand\theUniversity{Czech Technical University in Prague}
+\newcommand{\University}[1]{\renewcommand\theUniversity{#1}}
+
+\newcommand\theFaculty{Faculty of Electrical Engineering}
+\newcommand{\Faculty}[1]{\renewcommand\theFaculty{#1}}
+
+\newcommand\theDepartment{Department of Measurement}
+\newcommand{\Department}[1]{\renewcommand\theDepartment{#1}}
+
+\newcommand\theStudyProgram{Open Informatics}
+\newcommand{\StudyProgram}[1]{\renewcommand\theStudyProgram{#1}}
+
+\newcommand\theFieldOfStudy{Computer Engineering}
+\newcommand{\FieldOfStudy}[1]{\renewcommand\theFieldOfStudy{#1}}
+
+\newcommand\theSupervisor{Unknown}
+\newcommand{\Supervisor}[1]{\renewcommand\theSupervisor{#1}}
+
+\newcommand\thePlaceYear{Unknown}
+\newcommand{\PlaceYear}[1]{\renewcommand\thePlaceYear{#1}}
+
+
+
+% Front page for the dissertation thesis
+\renewcommand\maketitle{%
+	\begin{center}%
+        \sffamily
+		{
+		    \large{\theUniversity}\\
+		    \large{\theFaculty}\\
+		    \large{\theDepartment}
+        }
+		\vskip 15mm
+		\includegraphics[width=50mm]{template/logo}
+		\vskip 30mm
+		{\Large Master's Thesis} \\
+		\vskip 5mm
+		{\LARGE\bfseries\thetitle}\\
+		\vskip 8mm	
+		{\Large\emph{\theauthor}}\\
+		\vskip 50mm		
+		\large{Supervisor: \theSupervisor} \\
+		\vskip 15mm
+		{\large
+			{Study programme: \theStudyProgram} \\
+			\vskip 1mm
+			{Branch of study: \theFieldOfStudy} \\
+			\vskip 8mm
+		} 
+		\thedate
+		\thispagestyle{empty}
+		\newpage
+		\
+		\thispagestyle{empty}
+		\newpage
+	\end{center}
+}
+
+\newcommand{\ack}[1]{
+	\
+	\vfill
+	\section*{Acknowledgements}
+	#1
+	\cleardoublepage
+}
+
+\newcommand{\declaration}{
+	\
+	\vfill
+	\section*{Declaration}
+    I declare that the presented work was developed independently and that I have listed all sources of information used within it in accordance with the methodical instructions for observing the ethical principles in the preparation of university theses.
+	\vskip 20mm
+	In Prague on 8th January 2024\hfill....................................
+	\vskip 10mm
+	\cleardoublepage
+}
+
+\renewcommand{\abstract}[2]{
+	\section*{Abstract}
+	#1
+	\vfill
+	\section*{Abstrakt}
+	#2
+	\vfill
+	\cleardoublepage
+}
