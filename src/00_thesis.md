@@ -24,43 +24,7 @@ geometry:
 - right=35.6mm
 - bottom=30mm
 header-includes:
-  - \usepackage{pdfpages}
-  - \usepackage{multicol}
-  - \usepackage{parallel}
-  - \usepackage{titlesec}
-  - \usepackage{changepage}
-  - \usepackage[most]{tcolorbox}
-  - \newtcolorbox[auto counter, number within=chapter]{myquote}{colframe=white!0!white, arc=0.2mm float, enhanced}
-  - \renewenvironment{quote}{\begin{myquote}}{\end{myquote}}
-  - \titleformat{\chapter}[display]{\normalfont\LARGE\bfseries}{\chaptertitlename\ \thechapter}{-5pt}{\huge}
-  - \titlespacing*{\chapter}{0pt}{20pt}{20pt}
-  - |
-    \let\oldShaded\Shaded
-    \let\endoldShaded\endShaded
-
-    \renewenvironment{Shaded}{
-      \vspace{0.3cm}
-      \small
-      \begin{adjustwidth}{0.5cm}{0.5cm}
-        \oldShaded
-    }{
-      \normalsize
-      \vspace{0.3cm}
-      \endoldShaded
-      \end{adjustwidth}
-    }
-  - |
-    \usepackage{fancyhdr}
-    \usepackage{xcolor}
-    
-    \pagestyle{fancy}
-    \fancyhf{}
-    \renewcommand{\headrulewidth}{0pt}
-    \renewcommand{\chaptermark}[1]{\markboth{\thechapter.\ #1}{}}
-    \renewcommand{\sectionmark}[1]{\markright{\thesection.\ #1}}
-    \fancyhead[LO]{\textcolor{gray}{\sffamily{\leftmark}}}
-    \fancyhead[RE]{\textcolor{gray}{\sffamily{\rightmark}}}
-    \fancyfoot[C]{\thepage}
+  - \input{template/style.tex}
   - \input{template/front.tex} 
   - \University{Czech Technical University in Prague}
   - \Faculty{Faculty of Electrical Engineering}
@@ -823,8 +787,8 @@ In the second phase, the fact collection and an interface to the Polonius engine
 >    ],
 > }
 > ```
-> 
-> *Example:* FFI Polonius debug output for a simple program with a move error.
+> \
+> **Example:** FFI Polonius debug output for a simple program with a move error.
 
 *
 
