@@ -35,18 +35,21 @@ header-includes:
   - \Department{Department of Measurement}
   - \StudyProgram{Open Informatics}
   - \FieldOfStudy{Computer Engineering}
-  - \Supervisor{Ing. Pavel Píša Ph.D. \vskip 1mm Arthur Cohen}
+  - \Supervisor{Ing. Pavel Píša Ph.D.}
+  - \Advisor{Arthur Cohen}
 include-before:
   - \pagenumbering{roman}
   - \includepdf[pages=-]{Thesis_Assignment_Jakub_Dupák_Memory_safety_analysis_in_Rust_GCC.pdf}
   - \clearpage
-  - \ack{"TODO"}
+  - \ack{I would like to express my gratitude to Jeremy Bennet for providing me with the opportunity to work on this project. I would also like to thank Arthur Cohen and Philip Herron, the maintainers of the Rust GCC project, for their consultations and reviews, and Dr. Pavel Píša for his formal supervision. \\ Additionally, I would like to acknowledge our entire study group, Max Hollmann, Matěj Kafka, Vojtěch Štěpančík, and Jáchym Herynek, for endless technical discussions and mental support. \\ Finally, I would like to thank my family for their continuous support.}
   - \declaration
-  - \abstract{"xx"}{"xx"}
+  - \abstract{This thesis presents a first attempt to implement a memory safety analysis, called the borrow-checker, within the Rust GCC compiler. The analysis uses the Polonius engine, which is designed as a next-generation borrow-checker for rustc. The thesis describes the analysis's design, compiler modifications, and compares the internal representations of rustc and gccrs, highlighting challenges in adapting the rustc borrow-checker design to gccrs. The thesis concludes with a discussion of results and known limitations.}{compiler, Rust, borrow-checker, static analysis, GCC, Polonius}{Tato práce představuje první pokus o realizaci analýzy paměťové bezpečnosti, nazývané borrow-checker, v překladači Rust GCC. Analýza využívá systém Polonius, který je vytvořen jako nová generace borrow-checkeru pro překladač rustc. Práce popisuje návrh analýzy, úprav překladače a porovnává vnitřní reprezentaci překladačů rustc a gccrs a poukazuje na problémy při adaptaci návrhu borrow-checkeru z překladače rustc na překladač gccrs. Práci uzavírá diskusí o výsledcích a známých omezeních.}{překladač, Rust, borrow-checker, statická analýza, GCC, Polonius}
 ---
 
 \clearpage
 \pagenumbering{arabic}
+
+
 
 # Introduction
 
@@ -191,7 +194,7 @@ Then Polonius needs to figure out _active loans_. A loan is active at a CFG poin
 
 The compiler has to specify all the points in the control flow graph where a loan being alive would violate the memory safety rules. Polonius then checks whether such a situation can happen. If it can, it reports the facts involved in the violation. For example, if a mutable loan of a variable is alive, then any read/write/borrow operation on the variable invalidates the loan.
 
-![Steps performed by Polonius to find error. The starting nodes correspond to _facts_ supplied to Polonius by the compiler. Inner nodes represent intermediate results produced by the analysis. Errors (at the bottom) are ultimately returned to the compiler. (The graphic was adapted from [@Stjerna2020].)](polonius.svg)
+![Steps performed by Polonius to find error. (The graphic was adapted from [@Stjerna2020].)](polonius.svg)
 
 ## Polonius Facts
 
@@ -267,7 +270,7 @@ org/reference/expressions/if-expr.html#if-let-expressions)
 >     Foo(x)
 > }
 > ```
->
+> \
 > **Example:** This very simple code will be used as an example throughout this section.
 
 >```
@@ -305,7 +308,7 @@ org/reference/expressions/if-expr.html#if-let-expressions)
 >   }
 > }
 >```
->
+> \
 > **Example:** This is a textual representation of a small and simplified part of the abstract syntax tree (AST) of the example program. The full version can be found in the [appendix](#abstract-syntax-tree-ast).
 
 HIR is the primary representation used for most rustc operations[@devguide, HIR]. It combines a simplified version of the AST with additional tables and maps for quick access to extra information. Those tables contain, for example, information about the types of expressions and statements. These tables are used for analysis passes, e.g., the full (late) name resolution and type checking. The type-checking process includes checking the type correctness of the program, type inference, and resolution of type-dependent implicit language constructs.[@devguide [^hir2]]
@@ -583,8 +586,6 @@ The exact rules are best understood from the paper and from the code itself. The
 
 The visitor traverses each type with the current variance of the visited expression as an input. Each member of a type is in a covariant position. Each member of a function parameter is in a contravariant position. The return type is in the covariant position. The generic argument position is determined by the variance of the generic parameter (a variable of this computation). The variance of the current node within the type is computed by the `transform` function, taking the variance of the parent node and the variance based on the position of the current node and building and expression. When a lifetime or type parameter is encountered, then if the current variance expression is constant, the variable is updated to the new variance using the join operation with the current value. For an expression containing at least one variable, the expression is added to the list of constraints. Here, the fixed-point computation requirement arises.
 
-Once all types in the crate are processed, the constraints are solved using a fixed-point computation. Note that the current crate can use generic types from other crates, and therefore, it has to export/load the variance of public types.
-
 > **Example of Algorithm Execution**
 >
 > ```rust
@@ -618,6 +619,8 @@ Once all types in the crate are processed, the constraints are solved using a fi
 >  - `f0` is evident,
 >  - `f1` stayed bivariant, because it was not mentioned in the type,
 >  - `f2` is invariant, because it s is used in both covariant and contravariant position.
+
+Once all types in the crate are processed, the constraints are solved using a fixed-point computation. Note that the current crate can use generic types from other crates, and therefore, it has to export/load the variance of public types.
 
 ## Error Reporting
 
@@ -709,5 +712,9 @@ The main bottleneck of the current implementation is the BIR builder. After cove
 - Current integration with the build system is not viable for production. See the beginning of this [chapter](#implementation). 
 - Only information about the violation's presence and its category is passed back to the borrow-checker- no details about the violation itself are passed back.
 - Errors are reported only on function level (and using debug output). This can be problematic for automated testing because the test might fail/succeed for the wrong reason.
+
+# Conclusion
+
+
 
 \appendix

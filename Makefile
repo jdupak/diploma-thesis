@@ -7,5 +7,4 @@ thesis.pdf: src/* template/* Makefile
 	 --bibliography=bibliography.bib \
 	 --csl=../template/ieee.csl --citeproc \
 	 --highlight-style=monochrome \
-	 -V pdf-engine-opt=--print=pdf-minor-version=7 \
 	 -V documentclass=report -V links-as-notes
