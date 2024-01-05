@@ -1,5 +1,7 @@
 \usepackage{titling}
 \usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{hyperref}
 
 % Information about the school - can be dynamically changed through options
 \newcommand\theUniversity{Czech Technical University in Prague}
@@ -27,77 +29,90 @@
 \newcommand{\PlaceYear}[1]{\renewcommand\thePlaceYear{#1}}
 
 
-
 % Front page for the dissertation thesis
 \renewcommand\maketitle{%
-	\begin{center}%
+    \begin{center}%
         \sffamily
-		{
-		    \large{\theUniversity}\\
-		    \large{\theFaculty}\\
-		    \large{\theDepartment}
+        {
+            \large{\theUniversity}\\
+            \large{\theFaculty}\\
+            \large{\theDepartment}
         }
-		\vskip 15mm
-		\includegraphics[width=50mm]{../template/logo}
-		\vskip 30mm
-		{\Large Master's Thesis} \\
-		\vskip 5mm
-		{\LARGE\bfseries\thetitle}\\
-		\vskip 8mm	
-		{\Large\emph{\theauthor}}\\
-		\vskip 50mm		
-		\large{Supervisor: \theSupervisor} \\
-		\vskip 1mm
-		\large{Advisor: \theAdvisor} \\
-		\vskip 15mm
-		{\large
-			{Study programme: \theStudyProgram} \\
-			\vskip 1mm
-			{Branch of study: \theFieldOfStudy} \\
-			\vskip 8mm
-		} 
-		\thedate
-		\thispagestyle{empty}
-		\newpage
-		\
-		\thispagestyle{empty}
-		\newpage
-	\end{center}
+        \vskip 15mm
+        \includegraphics[width=50mm]{../template/logo}
+        \vskip 30mm
+            {\Large Master's Thesis} \\
+        \vskip 5mm
+            {\LARGE\bfseries\thetitle}\\
+        \vskip 8mm
+            {\Large\emph{\theauthor}}\\
+        \vskip 50mm
+        \large{Supervisor: \theSupervisor} \\
+        \vskip 1mm
+        \large{Project Reviewer: \theAdvisor} \\
+        \vskip 15mm
+            {\large
+        {Study programme: \theStudyProgram} \\
+        \vskip 1mm
+            {Branch of study: \theFieldOfStudy} \\
+        \vskip 8mm
+        }
+        \thedate
+    \end{center}
+    \thispagestyle{empty}
+    \clearpage \
+    {
+        \vfill
+        \textbf{Thesis Supervisor} \\
+        \hspace*{1em}\theSupervisor \\
+        \hspace*{1em}Department of Control Engineering \\
+        \hspace*{1em}Faculty of Electrical Engineering \\
+        \hspace*{1em}Czech Technical University in Prague \\
+        \vskip 1mm
+        \textbf{Project Reviewer} \\
+        \hspace*{1em}\theAdvisor \\
+        \hspace*{1em}Rust GCC Maintainer responsible to the GCC Steering Committee \\
+        \hspace*{1em}Embecosm
+        \vskip 2mm
+        This work is licensed under CC BY 4.0. \\ To view a copy of this license, visit \url{http://creativecommons.org/licenses/by/4.0/}
+    }
+    \thispagestyle{empty}
+    \newpage
 }
 
 \newcommand{\ack}[1]{
-	\
-	\vfill
-	\section*{Acknowledgement}
-	\emph{#1}
-	\vfill
+    \
+    \vfill
+    \section*{Acknowledgement}
+    \emph{#1}
+    \vfill
 }
 
 \newcommand{\declaration}{
-	\
-	\vfill
-	\section*{Declaration}
+    \
+    \vfill
+    \section*{Declaration}
     I declare that the presented work was developed independently and that I have listed all sources of information used within it in accordance with the methodical instructions for observing the ethical principles in the preparation of university theses.
-	\vskip 20mm
-	In Prague on 8th January 2024\hfill.......................................................
-	\vskip 10mm
-	\cleardoublepage
+    \vskip 20mm
+    In Prague on 8th January 2024\hfill.......................................................
+    \vskip 10mm
+    \cleardoublepage
 }
 
 \renewcommand{\abstract}[4]{
     \
-	\vfill
-	\section*{Abstract}
-	#1
-	\vskip 2mm
-	\textbf{Keywords:} #2
-	\vskip 10mm
-	\section*{Abstrakt}
-	#3
-	\vskip 2mm
-	\textbf{Klíčová slova:} #4
-	\vfill
-	\
-	\vfill
-	\cleardoublepage
+    \vfill
+    \section*{Abstract}
+    #1
+    \vskip 2mm
+    \textbf{Keywords:} #2
+    \vskip 10mm
+    \section*{Abstrakt}
+    #3
+    \vskip 2mm
+    \textbf{Klíčová slova:} #4
+    \vfill
+    \
+    \vfill
+    \cleardoublepage
 }

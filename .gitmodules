@@ -1,0 +1,3 @@
+[submodule "filter/pandoc-gls"]
+	path = filter/pandoc-gls
+	url = https://github.com/tomncooper/pandoc-gls.git

@@ -1,4 +1,4 @@
-# Examples of Errors Detected by the Borrow-checker
+# Examples of Errors Detected by the Borrow-Checker {#sec:errors}
 
 A faulty program from gccrs test suite together with a fixed alternative (when applicable) is presented. Expected errors are marked using special comments used by the DejaGnu compiler testing framework.
 
