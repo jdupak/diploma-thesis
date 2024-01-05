@@ -2,32 +2,6 @@
 title: "Memory Safety Analysis in Rust GCC"
 author: "Jakub Dupák"
 date: "January 2024"
-
-lang: en
-link-citations: true
-link-bibliography: true
-nocite: "@*"
-classoption: twoside,symmetric
-fontsize: "11pt"
-mainfont: "Latin Modern Roman"
-mainfontoptions:
-- BoldFont=Technika-Regular
-- BoldItalicFont=Technika-Italic
-sansfont: "Technika"
-sansfontoptions:
-  - UprightFont = *-Light,
-  - BoldFont = *-Regular,
-  - ItalicFont = *-LightItalic,
-  - BoldItalicFont = *-Italic,
-numbersections: true
-lof: true
-tos: true
-geometry:
-- a4paper
-- top=32mm
-- left=35.6mm
-- right=35.6mm
-- bottom=30mm
 header-includes:
     - \input{../template/style.tex}
     - \input{../template/front.tex} 

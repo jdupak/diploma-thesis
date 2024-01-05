@@ -6,6 +6,7 @@ thesis.pdf: src/* template/* Makefile
 	 --from markdown+smart -s \
 	 --pdf-engine=$(PDF_ENGINE) \
 	 --number-sections \
+	 --metadata-file=../template/settings.yml \
 	 --filter pandoc-crossref \
 	 --bibliography=bibliography.bib \
 	 --csl=../template/ieee.csl --citeproc \
