@@ -16,7 +16,7 @@ include-before:
     - \pagenumbering{roman}
     - \includepdf[pages=-]{Thesis_Assignment_Jakub_Dupák_Memory_safety_analysis_in_Rust_GCC.pdf}
     - \clearpage
-    - \ack{I would like to express my gratitude to Jeremy Bennett for providing me with the opportunity to work on this project. I would also like to thank Arthur Cohen and Philip Herron, the maintainers of the Rust GCC project, for their consultations and reviews, and Dr. Pavel Píša for my introduction to the professional open-source developers community. \\ Additionally, I would like to acknowledge our entire study group, Max Hollmann, Matěj Kafka, Vojtěch Štěpančík, and Jáchym Herynek, for endless technical discussions and mental support. \\ Finally, I would like to thank my family for their continuous support.}
+    - \ack{I would like to express my gratitude to Jeremy Bennett for providing me with the opportunity to work on this project. I would also like to thank Arthur Cohen and Philip Herron, the maintainers of the Rust GCC project, for their consultations and reviews, and Dr. Pavel Píša for my introduction to the professional open-source developer community. \\ Additionally, I would like to acknowledge our entire study group, Max Hollmann, Matěj Kafka, Vojtěch Štěpančík, and Jáchym Herynek, for endless technical discussions and mental support. \\ Finally, I would like to thank my family for their continuous support.}
     - \declaration
     - \abstract{This thesis presents the first attempt to implement a memory safety analysis, known as the borrow-checker, within the Rust GCC compiler. It utilizes the Polonius engine, envisioned as the next-generation borrow-checker for rustc. The work describes the design of this analysis, the necessary modifications to the compiler, and compares the internal representations between rustc and gccrs. This comparison highlights the challenges faced in adapting the rustc borrow-checker design to gccrs. The thesis concludes with a discussion of the results and known limitations.}{compiler, Rust, borrow-checker, static analysis, GCC, Polonius}{}{překladač, Rust, borrow-checker, statická analýza, GCC, Polonius}
 ---
@@ -724,17 +724,22 @@ To further inspect the working of the borrow-checker, a debug build of the compi
 >  }
 > ```
 
-To get the corresponding output from rustc, use flags `-Znll-facts -Zdump-mir=nll -Zidentify-regions`. With a debug build of rustc, the can also enable the debug of the borrow-checker using the environmental variable RUSTC_LOG=rustc_borrowck`.
+To get the corresponding output from rustc, use flags `-Znll-facts -Zdump-mir=nll -Zidentify-regions`. With a debug build of rustc, the reader can also enable the debug log of the borrow-checker using the environmental variable `RUSTC_LOG=rustc_borrowck`.
 
-For more complex debugging and inspection, gdb/lldb can be used with no special step. One issue a developer may encounter is that LLDB might not be able to identify virtual classes correctly. A simple LLDB formater to resolve the TyTy classes can be found in [this gist](https://gist.github.com/jdupak/68af0f0ad91f3e6eba2c478dc4f662dd). 
+For more complex debugging and inspection, gdb/lldb can be used as usual. One issue the reader may encounter is that LLDB might not be able to identify virtual classes correctly. A simple LLDB formatter to resolve the TyTy classes based in internal identifiers can be found in [this gist](https://gist.github.com/jdupak/68af0f0ad91f3e6eba2c478dc4f662dd). 
 
 # Conclusion
 
 The goal of this project was to implement a prototype of a Polonius-based borrow-checker for Rustc GCC to explore the feasibility of this approach and provide code infrastructure for further development. The project was implemented in a [personal fork](https://github.com/jdupak/gccrs/), and stabilized parts are being submitted to the main [Rustc GCC GitHub repository](https://github.com/Rust-GCC/gccrs). All accepted changes are scheduled to be included in the [central GCC repository](https://gcc.gnu.org/git/) by the maintainers of Rust CGG with the help of the author.
 
 This text described the problem of borrow-checking, mapped the situation in rustc and gccrs, and presented the design of the solution as well as the experiments that led to this design. 
-The prototype version of the implemented borrow-checker can detect the most common errors in simple Rust code. Those include violations of the access rules (number of allowed loans of a given type, loan/access conflicts), move/initialization errors, and subset errors. Examples of detected errors can be found in the appendix. The prototype provides significant infrastructure for further development. The last chapter provides an overview of the limitations of the current implementation. The limitations are not fundamental and should be possible to resolve by simple extensions and implementation of missing cases in the existing code. Future work should address this limitation to provide a production-ready solution.
-I believe that the Rust programming language will play a significant role in systems programming, and I would like to continue working on this project, other problems in Rustc GCC, or the rustc compiler itself.
+The prototype version of the implemented borrow-checker can detect the most common errors in simple Rust code. Those include violations of the access rules (number of allowed loans of a given type, loan/access conflicts), move/initialization errors, and subset errors. Examples of detected errors can be found in the appendix.
+
+The last chapter provides an overview of the limitations of the current implementation. The limitations are not fundamental and should be possible to resolve by simple extensions and implementation of missing cases in the existing code. Future work should address this limitation to provide a production-ready solution. 
+
+The problem of borrow-checking is very complex, and a complete solution is expected to take months if not years of future work. This project provides a significant stepping stone on the way to a production ready solution as the prototype provides substantive infrastructure for further development and solutions to most of the hard problems.
+
+I believe that the Rust programming language will play a significant role in systems programming, and I would like to continue working on this project, other problems in Rustc GCC, or the rustc compiler itself. It would seem that there is considerable interest in the industry as well since Bradley Spengler, President of Open Source Security, Inc., one of two main sponsors of Rust GCC, expressed interest in financially supporting my continued work on Rust GCC. I am very grateful for this opportunity.
 
 \appendix
 
