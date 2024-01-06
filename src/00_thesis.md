@@ -172,34 +172,48 @@ The engine next determines _active loans_ based on two criteria: the liveliness 
 
 The compiler has to specify all the points in the control flow graph where a loan being alive would violate the memory safety rules. Polonius then checks whether such a situation can happen, and if so, it reports the facts involved in the violation. For example, if a mutable loan of a variable is alive, then any read/write/borrow operation on the variable invalidates the loan.
 
-![Illustration of steps performed by Polonius to detect errors. (Adapted from [@Stjerna2020].)](polonius.svg)
+![Illustration of steps performed by Polonius to detect errors. (Adapted from [@Stjerna2020].)](polonius.svg){ width=77% }
 
 ## Polonius Facts
 
-This section provides a list of facts taken by Polonius to give the reader a better idea of the work that the compiler needs to do. The facts are grouped into categories and briefly described. The full list of facts can be found in the [Polonius source code](https://github.com/rust-lang/polonius/blob/master/polonius-engine/src/facts.rs) and the Polonius Book[@polonius].
+This section outlines the facts that Polonius utilizes, offering a better idea of the work that the compiler needs to do. These facts are categorized and briefly explained. For an exhaustive list, refer to the [Polonius source code](https://github.com/rust-lang/polonius/blob/master/polonius-engine/src/facts.rs) and the Polonius Book[@polonius].
 
-- Control flow graph edges (`cfg_edge: (Point, Point)`).
-- Facts regarding variable usage and its effects.
-    - `var_used_at: (Variable, Point)` - Any usage of a variable except for a drop (destructor).
-    - `var_defined_at: (Variable, Point)` - Start of scope or reassignment. This reassignment treatment makes the variable act similarly to an [SSA variable](https://en.wikipedia.org/wiki/Static_single-assignment_form).
-    - `var_dropped_at: (Variable, Point)` - Drop (destructor call) of the variable.
-    - `use_of_var_derefs_origin: (Variable, Origin)` - The type of the variable contains the origin.
-    - `drop_of_var_derefs_origin: (Variable, Origin)` - When the drop implementation used the origin.
-- Facts regarding paths and their usages. Paths represent indirect or partial access to a variable (e.g., field access or cast).
-    - `path_is_var: (Path, Variable)` - Lists "trivial" paths that are just a variable.
-    - `child_path: (Path, Path)` - Describes hierarchical (nontransitive) relationships between paths. For example, a field path is a child path of the variable path from which it is accessed.
-    - `path_assigned_at_base: (Path, Point) ` - The path is assigned at the CFG point. "base" means that this fact is emitted only for the exact path used, not all its parent paths.
-    - `path_moved_at_base: (Path, Point)` - Ownership of origins is transferred at the CFG point.
-    - `path_accessed_at_base: (Path, Point)` - Any memory access to the path (read or write).
-- Facts about relationships (subset relation) of origins.
-    - `known_placeholder_subset: (Origin, Origin)` - Constraints on universal origins (those representing loans that happened outside the function).
-    - `universal_region: (Origin)` - List of universal origins. (See the previous point.)
-    - `subset_base: (Origin, Origin)` - Any relationship between origins required by the subtyping rules.
-    - `placeholder: (Origin, Loan)` - Associates an origin with a loan.
-- Facts about loans.
-    - `loan_issued_at: (Loan, Point)` - Result of borrow expression.
-    - `loan_killed_at: (Loan, Point)` - Loan is no longer live after this point.
-    - `loan_invalidated_at: (Loan, Point)` - If the loan is live at this point, it is an error.
+- Atoms:
+  - `Point` is a CFG point.
+  - `Variable` is a variable in the program.
+  - `Path` is a memory location in the program.
+  - `Origin` is a set of loans that can be referenced using a variable at each CFG point. It is the interpretation of lifetimes used by Polonius.
+  - `Loan` is a result of a borrow expression.
+
+- Control Flow Graph:
+  - `cfg_edge: (Point, Point)` represent the edges in the control flow graph of the program.
+
+- Variable Usage and Effects:
+    - `var_used_at: (Variable, Point)` marks locations a variable is used in any way except for being dropped (destructed).
+    - `var_defined_at: (Variable, Point)` marks the beginning of a variable's scope or its reassignment. All facts related to given variable are reset at this point. 
+    - `var_dropped_at: (Variable, Point)` indicates a point where a variable is dropped (its destructor is called).
+    - `use_of_var_derefs_origin: (Variable, Origin)` means that a variable type contains given origin.
+    - `drop_of_var_derefs_origin: (Variable, Origin)` reflects that the origin is used in the drop implementation.
+
+- Path Usage and Effects:
+    Paths correspond to indirect or partial access to a variable, such as field access or casting.
+    - `path_is_var: (Path, Variable)` lists trivial paths that directly correspond to a variable.
+    - `child_path: (Path, Path)` describes hierarchical relationships between paths, where one path is a subset or component of another.
+    - `path_assigned_at_base: (Path, Point)` highlights where a specific path is assigned in the CFG.
+    - `path_moved_at_base: (Path, Point)` marks the transfer of ownership of origins at a specific CFG point.
+    - `path_accessed_at_base: (Path, Point)` indicates any memory access (read or write) to a path.
+    - 
+- Origin Relationships:
+    - `known_placeholder_subset: (Origin, Origin)` constrains universal origins, representing loans from outside the function.
+    - `universal_region: (Origin)` lists universal origins.
+    - `subset_base: (Origin, Origin)` describes origin subset (outlives) relationships.
+    - `placeholder: (Origin, Loan)` associates a universal origin with a loan that happened outside the function.
+
+- Loan Facts:
+    - `loan_issued_at: (Origin, Loan, Point)` marks execution of a borrow expression.
+    - `loan_killed_at: (Loan, Point)` marks the end of a loan's validity.
+    - `loan_invalidated_at: (Point, Loan)` marks points where an active loan leads to an error.
+
 
 # Comparison of Internal Representations
 
