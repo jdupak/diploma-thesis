@@ -8,7 +8,7 @@
 > 
 > `$ rustc -Z unpretty=mir -Z identify-regions`
 
-## Rust source code
+## Rust Source Code
 
 ```rust
     struct Foo(i32);

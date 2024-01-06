@@ -226,11 +226,11 @@ Modern Roman}
 
 \clearpage
 
-\ack{I would like to express my gratitude to Jeremy Bennett for providing me with the opportunity to work on this project. I would also like to thank Arthur Cohen and Philip Herron, the maintainers of the Rust GCC project, for their consultations and reviews, and Dr.\ Pavel Píša for my introduction to the professional open-source developer community. \\ Furthermore, I would like to acknowledge our entire study group, Max Hollmann, Matěj Kafka, Vojtěch Štěpančík and Jáchym Herynek, for endless technical discussions and mental support. \\ Finally, I would like to thank my family for their continuous support.}
+\ack{I express my gratitude to Jeremy Bennett for providing me with the opportunity to work on this project. I would also like to thank Arthur Cohen and Philip Herron, the maintainers of the Rust GCC project, for their consultations and reviews, and Pavel Píša for my introduction to the professional open-source developer community. \\ Furthermore, I would like to acknowledge our entire study group, Max Hollmann, Matěj Kafka, Vojtěch Štěpančík and Jáchym Herynek, for endless technical discussions and mental support. \\ Finally, I would like to thank my family for their continuous support.}
 
 \declaration
 
-\abstract{This thesis presents the first attempt to implement a memory safety analysis, known as the borrow checker, within the Rust GCC compiler. It utilizes the Polonius engine, envisioned as the next-generation borrow checker for rustc. The work describes the design of this analysis, the necessary modifications to the compiler, and compares the internal representations between rustc and gccrs. This comparison highlights the challenges faced in adapting the rustc borrow checker design to gccrs. The thesis concludes with a discussion of the results and known limitations.}{compiler, Rust, borrow checker, static analysis, GCC, Polonius}{}{překladač, Rust, borrow checker, statická analýza, GCC, Polonius}
+\abstract{This thesis presents the first attempt to implement a memory safety analysis, known as the borrow checker, within the Rust GCC compiler. It utilizes the Polonius engine, which was designed as the next-generation borrow checker for rustc. The text describes the design of this analysis, the necessary modifications of the compiler, and compares the internal representations between rustc and gccrs. This comparison highlights the challenges in adapting the rustc borrow checker design to gccrs. The thesis concludes with a discussion of the results and known limitations.}{compiler, Rust, borrow checker, static analysis, GCC, Polonius}{Tato práce představuje první pokus o realizaci analýzy paměťové bezpečnosti, nazývané borrow-checker, v překladači Rust GCC. Analýza využívá systém Polonius, který je vytvořen jako nová generace borrow-checkeru pro překladač rustc. Práce popisuje návrh analýzy, úprav překladače a porovnává vnitřní reprezentaci překladačů rustc a gccrs a poukazuje na problémy při adaptaci návrhu borrow-checkeru z překladače rustc na překladač gccrs. Práci uzavírá diskusí o výsledcích a známých omezeních.}{překladač, Rust, borrow checker, statická analýza, GCC, Polonius}
 
 {
 \setcounter{tocdepth}{2}
@@ -247,105 +247,102 @@ memory safety without runtime
 overhead\citeproc{ref-Matsakis2014}{{[}1{]}}. To achieve this goal, a
 Rust compiler has to perform a static analysis to ensure that the memory
 safety rules are not violated. This analysis is commonly called the
-borrow checker. The borrow checker is a complex analysis that has been
-evolving throughout the history of the Rust language and its reference
-implementation of the compiler, rustc. It evolved from a simple lexical
-analysis to a control-flow sensitive analysis, gradually providing a
-more complete conservative analysis. The experimental version of the
-rustc compiler uses a new analysis engine and algorithm called Polonius.
-The algorithm changes some fundamental views on the internal semantics
-of the analysis to allow more programs to be accepted and provides
-better error reporting for rejected
-programs\citeproc{ref-RustBelt}{{[}2{]}}. The Polonius Working Group is
-planning to replace the current borrow checker with one based on
-Polonius by 2024 \citeproc{ref-poloniusupdate}{{[}3{]}}.
+\emph{borrow checker}. The borrow checker is a complex analysis that has
+been evolving throughout the history of the Rust language and its
+reference implementation compiler, \emph{rustc}. It evolved from a
+simple lexical analysis to a control-flow sensitive analysis, gradually
+providing a more precise validation. The experimental version of the
+rustc compiler uses a new analysis engine and algorithm called
+\emph{Polonius}. The algorithm changes some fundamental views on the
+internal semantics of the analysis to allow more programs to be accepted
+and provides better error reporting for rejected
+programs\citeproc{ref-RustBelt}{{[}2{]}}. The
+\href{https://rust-lang.github.io/compiler-team/working-groups/polonius/}{Polonius
+Working Group} is planning to replace the current rustc borrow checker
+with one based on Polonius in the Rust language edition
+2024\citeproc{ref-poloniusupdate}{{[}3{]}}.
 
-Rust GCC (also known as gccrs) is one of the emerging alternative Rust
-compilers. Unlike other alternative compilers (e.g., mrustc,
-rustc\_codegen\_gcc), gccrs aims to build a complete general-purpose
-Rust compiler independent of rustc. It is based on the GCC compiler
-platform, which provides a mature and stable infrastructure for building
-compilers. The goal of gccrs is to provide a compatible drop-in
-replacement for rustc while taking advantage of the GCC infrastructure.
-GCC (compared to LLVM) offers more target platforms and different
-optimizations and provides security plugins that could be used to find
-errors in
-\href{https://doc.rust-lang.org/reference/unsafety.html}{unsafe}{]}(https://doc.rust-lang.org/reference/unsafety.html)
+Rust GCC, also known as gccrs, is one of the emerging alternative Rust
+compilers. Unlike mrustc and rustc\_codegen\_gcc, gccrs aims to build a
+complete general-purpose Rust compiler independent of rustc. Gccrs aims
+to offer a rustc-compatible, drop-in replacement, capitalizing on the
+mature and diverse features of the GCC infrastructure. GCC (compared to
+LLVM) offers more target platforms and different optimizations and
+provides security plugins (originally designed for C) that could be used
+to find errors in
+\href{https://doc.rust-lang.org/reference/unsafety.html}{\emph{unsafe}}
 Rust code\citeproc{ref-eurorust}{{[}4{]}}. The goal of this thesis was
 to start the development of a Polonius-based borrow checker in gccrs.
 
 The first chapter introduces the problem of borrow checking. It gives a
 brief overview of the development of the borrow checker in the rustc
-compiler, up to the Polonius project, which is utilized in this work.
-The second chapter describes the Polonius analysis engine and its API.
-The third chapter compares the internal representations of rustc and
-gccrs to highlight the challenges of adapting the rustc borrow checker
-design to gccrs. The next chapter explains the design of the borrow
-checker implemented in gccrs as part of this work. It maps the
-experiments that lead to the current design and describes the new
-intermediate representation and its usage in the analysis. Later
-sections of the chapter describe other modifications of the rest of the
-compiler necessary to support borrow checking. The final chapter
-elaborates on the results, the current state of the implementations, and
-the known missing features and limitations. Since this work was
-experimental in nature, it focused on exploring most aspects of the
-problem rather than on the completeness of the solution. The final
-chapter describes the implementation and limitations of the current
-state.
+compiler, up to the Polonius project. The second chapter describes the
+Polonius analysis engine and its API. The third chapter compares the
+internal representations of rustc and gccrs to highlight the challenges
+of adapting the rustc borrow checker design to gccrs. The next chapter
+explains the design of the borrow checker implemented in gccrs as part
+of this work. It maps the experiments that lead to the current design
+and describes the new intermediate representation and its usage in the
+analysis. Later sections of the chapter describe other modifications of
+the rest of the compiler necessary to support borrow checking. The final
+chapter elaborates on the implementation, its development, the current
+state and the known missing features and limitations.
 
 \chapter{The Problem of Borrow
 Checking}\label{the-problem-of-borrow-checking}
 
-This section introduces borrowing checking and briefly describes its
-development in Rust. First, a simple lexical borrowing check is
-described. Then, the more complex control-flow sensitive borrow checking
-is introduced. Finally, the Polonius analysis engine is described. Since
-this work utilizes the Polonius engine, it is described in more detail
-in the following chapter.
+This section introduces the concept of borrow checking and traces its
+development within the Rust programming language. First, it presents the
+simple lexical approach, followed by an explanation of a more advanced
+control-flow sensitive analysis. Finally, the section then provides an
+introduction to the Polonius analysis engine, the latest approach to
+borrow checking in Rust. Since this work utilizes the Polonius engine,
+it is described in more detail in the following chapter.
 
-Typical programming language implementations fall into two categories
-based on how they manage memory with dynamic storage
-duration\footnote{Dynamic storage duration means that it is unknown at
-  compile time when storage can be safely reclaimed. In contrast, memory
-  with static storage duration is reclaimed at the end of the program,
-  and memory with automatic storage duration is bound to a function
-  call.}. Languages such as C use manual memory management, where the
-programmer is responsible for explicitly allocating and freeing memory.
-Higher-level languages like Java or Python use automatic memory
-management, where a
-\href{https://en.wikipedia.org/wiki/Garbage_collection_(computer_science)}{garbage
-collector} manages the memory at runtime. Since the C approach is
-considerably error-prone\citeproc{ref-nsa}{{[}5{]}}, later languages
-like C++ and \href{https://ziglang.org/}{Zig} provide tools to make the
-deallocation of memory more implicit. For simple cases, they tie the
-deallocation to the destruction of other objects
-(\href{https://en.cppreference.com/w/cpp/language/raii}{RAII},
+Typical programming language implementations manage memory with dynamic
+storage duration in one of two ways\footnote{Dynamic storage duration
+  means that it is unknown at compile time when storage can be safely
+  reclaimed. In contrast, memory with static storage duration is
+  reclaimed at the end of the program, and memory with automatic storage
+  duration is bound to a function call.}. Languages like C employ manual
+memory management, where programmers explicitly allocate and free
+memory, a method prone to errors\citeproc{ref-nsa}{{[}5{]}}. In
+contrast, higher-level languages such as Java and Python use automatic
+memory management, where runtime garbage collectors handle memory
+management tasks.
+
+Addressing the pitfalls of manual memory management, languages like C++
+and \href{https://ziglang.org/}{Zig} have introduced tools for more
+implicit memory deallocation. In simple situations, these tools tie
+memory deallocation to the destruction of objects, utilizing concepts
+like \href{https://en.cppreference.com/w/cpp/language/raii}{RAII},
 \href{https://en.cppreference.com/w/cpp/memory\#Smart_pointers}{smart-pointers},
-\href{https://ziglang.org/documentation/master/\#defer}{defer
-statements}). What differentiates it from stack allocation is that the
-relationship (called ownership) can be transferred dynamically between
-objects. For more complex cases, when there is no single object to which
-we can tie the deallocation (that means there are multiple objects, and
-the deallocation has to be linked to the destruction of the last one),
-they opt in for a runtime solution
-(\href{https://en.wikipedia.org/wiki/Reference_counting}{reference
-counting}). Those approaches improve the situation considerably.
-However, there are two remaining problems. First, those ownership bounds
-can be created incorrectly by the programmer, mainly in cases where the
-ownership of the memory is transferred between objects. The situation is
-even worse when two systems with different memory management models are
-interfaced\footnote{An interface between a C++ application with
+and \href{https://ziglang.org/documentation/master/\#defer}{defer
+statements}. Here, the key difference from stack allocation is that the
+ownership can be dynamically transferred between objects. In more
+complex situations, where multiple objects share memory and deallocation
+is tied to the last object's destruction, these languages opt-in for
+runtime solutions like
+\href{https://en.wikipedia.org/wiki/Reference_counting}{reference
+counting}.
+
+Despite these improvements, two serious problems remain. First,
+programmers can incorrectly establish and maintain ownership binds,
+especially during dynamic ownership transfers between objects. This
+issue can very often occur when interfacing systems with differing
+memory management models\footnote{An interface between a C++ application
+  with
   \href{https://www.cppreference.com/Cpp_STL_ReferenceManual.pdf}{STL-based}
   memory management and the \href{https://www.qt.io/}{Qt GUI framework},
   where all Qt API methods take raw pointers (as opposed to smart
   pointers). Some of those methods assume that the ownership is
   transferred, and some of them do not. These methods can only be
-  differentiated using their documentation.}. Second, when the ownership
-is not transferred but a copy of the pointer is used temporarily (this
-is called ``borrowing'' in Rust), assuming that the owning object will
-exist for the whole time, this copy is used. This kind of assumption is
-often wrong, and this kind of mistake is often called a ``dangling
-pointer.''\citeproc{ref-danglingpointer}{{[}6{]}}
+  differentiated using their documentation.}. Second, issue appears when
+the ownership is not transferred, but a copy of the pointer is used
+temporarily (this is called ``borrowing'' in Rust). The assumption that
+the owning object will exist for the whole time this copy is used is
+often wrong. This kind of mistake is called a ``dangling
+pointer.''\citeproc{ref-danglingpointer}{{[}6{]}}.
 
 The Rust language builds on the RAII approach; however, it adds a
 built-in static analysis called the borrow checker to ensure that the
@@ -825,7 +822,7 @@ not the case for gccrs. In GCC, the CFG is only available in the
 \emph{Low GIMPLE} representation, deep inside the middle-end where the
 IR is language independent.
 
-\section{Rustc's Representation}\label{rustcs-representation}
+\section{Rustc Representation}\label{rustc-representation}
 
 In the previous section, we have seen that rustc is responsible for
 transforming the code from the raw text to the LLVM IR. Given the high
@@ -2435,7 +2432,7 @@ Examples}\label{rustc-intermediate-representations-examples}
 \texttt{\$\ rustc\ -Z\ unpretty=mir\ -Z\ identify-regions}
 \end{quote}
 
-\section{Rust source code}\label{rust-source-code}
+\section{Rust Source Code}\label{rust-source-code}
 
 \begin{Shaded}
 \begin{Highlighting}[]

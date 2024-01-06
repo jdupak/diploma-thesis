@@ -4,7 +4,7 @@
 \usepackage{titlesec}
 \usepackage{changepage}
 \usepackage[most]{tcolorbox}
-\newtcolorbox{myquote}{colframe=white!0!white, arc=0.2mm, float}
+\newtcolorbox{myquote}{colframe=white!0!white, arc=0.2mm, breakable}
 \renewenvironment{quote}{\begin{myquote}}{\end{myquote}}
 \titleformat{\chapter}[display]{\normalfont\LARGE\bfseries}{\chaptertitlename\ \thechapter}{-5pt}{\huge}
 \titlespacing*{\chapter}{0pt}{20pt}{20pt}
@@ -23,7 +23,6 @@
     \end{adjustwidth}
 }
 \usepackage{fancyhdr}
-\usepackage{xcolor}
 
 \pagestyle{fancy}
 \fancyhf{}
@@ -38,7 +37,6 @@
 \deffootnote[1em]{1em}{1em}{\textsuperscript{\thefootnotemark}}
 
    \usepackage{enumitem}
-   \usepackage{amssymb}
    \setlistdepth{9}
 
    \setlist[itemize,1]{label={\footnotesize$\bullet$}}
