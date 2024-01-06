@@ -217,13 +217,13 @@ This section outlines the facts that Polonius utilizes, offering a better idea o
 
 # Comparison of Internal Representations
 
-Executing a borrow checker with an external analysis engine involves two key steps. The first is collecting relevant program information, referred to as _facts_. The second step is evaluation of these facts using the external engine. Before we can discuss the _collection_ of facts, a clear understanding of how programs are represented inside the compiler is essential. We will use the term _internal representation_ (IR) to refer to the representation of the program inside the compiler. We will compare the IRs used by rustc and gccrs to highlight the differences between the two compilers. This will help us understand the challenges of adapting the borrow checker design from rustc to gccrs. First, we will describe the IRs used by rustc and then compare them with those used in gccrs.
+Executing a borrow checker with an external analysis engine involves two key steps. The first is collecting relevant program information, referred to as _facts_. The second step is evaluation of these facts using the external engine. Before we can discuss the _collection_ of facts, we need a clear understanding of how programs are represented inside the compiler. We will use the term _internal representation_ (IR) to refer to the representation of the program inside the compiler. We will compare the IRs used by rustc and gccrs to highlight the differences between the two compilers. This will help us understand the challenges of adapting the borrow checker design from rustc to gccrs. First, we will describe the IRs used by rustc and then compare them with those used in gccrs.
 
 ## GCC and LLVM
 
 To understand the differences between each of the compilers, we must first explore the differences between the compiler platforms on which they are built (GCC and LLVM). We will only focus on the middle-end of each platform, since the back-end does not directly influence the front-end development.
 
-LLVM is built around a three-address code (3-AD)[^comp1] representation known as the _LLVM intermediate representation_ (LLVM IR) [@llvm, llvm-ir]. This IR serves as an interface between the front-ends and the LLVM platform. Each front-end is responsible for transforming its custom AST IR[^comp2] into the LLVM IR. The LLVM IR is stable and strictly separated from the front-end; therefore, it cannot be easily extended to include language-specific constructs.
+LLVM is built around a three-address code (3-AD)[^comp1] representation known as the _LLVM intermediate representation_ (LLVM IR)[@llvm]. This IR serves as an interface between the front-ends and the LLVM platform. Each front-end is responsible for transforming its custom AST IR[^comp2] into the LLVM IR. The LLVM IR is stable and strictly separated from the front-end; therefore, it cannot be easily extended to include language-specific constructs.
 
 [^comp1]: Three-address code represents a program as sequences of statements (known as *basic blocks*), connected by control flow instructions to form a control flow graph (CFG).
 
@@ -249,8 +249,7 @@ AST is a tree-based representation of the program, closely following each source
 
 [^rustc2]: [https://rustc-dev-uide.rust-lang.org/name-resolution.html](https://rustc-dev-uide.rust-lang.org/name-resolution.html)
 
-[^rustc3]: [https://doc.rust-lang.org/reference/expressions/if-expr.html#if-let-expressions](https://doc.rust-lang.
-org/reference/expressions/if-expr.html#if-let-expressions)
+[^rustc3]: [https://doc.rust-lang.org/reference/expressions/if-expr.html#if-let-expressions](https://doc.rust-lang.org/reference/expressions/if-expr.html#if-let-expressions)
 
 > ```rust
 > struct Foo(i31);
@@ -259,7 +258,7 @@ org/reference/expressions/if-expr.html#if-let-expressions)
 >     Foo(x)
 > }
 > ```
-> **Example:** This very simple code will be used as an example throughout this section.
+> **Example:** This simple code snippet will serve as our example through this section.
 
 >```text
 > Fn {
@@ -285,7 +284,7 @@ org/reference/expressions/if-expr.html#if-let-expressions)
 >```
 > **Example:** This is a textual representation of a small and simplified part of the abstract syntax tree (AST) of the example program. The full version can be found in the [appendix](#abstract-syntax-tree-ast).
 
-HIR is the primary representation used for most rustc operations[@devguide, HIR]. It combines a simplified version of the AST with additional tables and maps for quick access to additional information. Those tables contain, for example, information about the types of expressions and statements. These tables are used for analysis passes, e.g., the full (late) name resolution and type checking. The type-checking process includes checking the type correctness of the program, type inference, and resolution of type-dependent implicit language constructs.[@devguide [^hir2]]
+The HIR is rustc primary representation, and it is used for most operations[@devguide, HIR] It combines a simplified AST with additional tables for quick access to additional information, such as expression and statement types. These tables are used for analysis passes, including full name resolution and type checking. Type checking includes verification type correctness, inference, and resolving of implicit type-dependent constructs[@devguide [^hir2]].
 
 [^hir2]: [https://rustc-dev-guide.rust-lang.org/type-checking.html](https://rustc-dev-guide.rust-lang.org/type-checking.html)
 
