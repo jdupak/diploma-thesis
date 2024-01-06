@@ -70,7 +70,7 @@ Throughout Rust's borrow checking development, the interpretation of _a subset o
 
 ## The Evolution of Borrow Checking in Rustc {#sec:evolution}
 
-This section describes how the analysis evolved, gradually rejecting less memory-safe programs. rustc started with lexical (scope-based analysis), followed by the first non-lexical (CFG-based) analysis, which is being extended by the Polonius project. This section strongly builds upon RFC 2094[@rfc2094nll], which introduced non-lexical borrow checking to Rust. Examples from that RFC are presented in this section.
+This section describes how the analysis evolved, gradually rejecting less memory-safe programs. Rustc started with lexical (scope-based analysis), followed by the first non-lexical (CFG-based) analysis, which is being extended by the Polonius project. This section strongly builds upon RFC 2094[@rfc2094nll], which introduced non-lexical borrow checking to Rust. Examples from the RFC are presented in this section.
 
 The simplest variant of borrow checker is based on stack variable scopes. A reference is valid from the point in the program (here in terms of statements and expressions) where it is created until the end of the current scope. This approach can be extended to handle some common programming patterns as special cases. For example, when a reference is created in function parameters, it is valid until the end of the function call.
 
@@ -101,7 +101,7 @@ However, a very common modification might cause the program to be rejected. Sinc
 > ```
 
 
-Now, there is no simple way to say when the lifetime of the reference should end to prove that his program is safe from its syntactic structure. This code can be fixed by explicitly specifying where the lifetime should end. However, this clutters up the code and cannot be used for more advanced cases.
+There is no simple way to determine (from the syntactic structure) when the lifetime of the reference should end to prove that his program is safe. This code can be fixed by explicitly specifying where the lifetime should end. However, this clutters the code and cannot be used for more advanced cases.
 
 > ```rust
 > {
@@ -117,7 +117,7 @@ Now, there is no simple way to say when the lifetime of the reference should end
 > ```
 
 
-One of those more advanced cases occurs when lifetimes are not symmetric in conditional branches. A typical case is where a condition checks the presence of a value. In the positive branch, we have a reference to the value, but in the negative branch, we do not. Therefore, it is safe to create a new reference in the negative branch. By "safe," we mean that there will be only one reference pointing to the `map` object at any time. A convenient way to describe "at any time" is to use the control flow graph (CFG) representation of the program.
+One of those more advanced cases occurs when lifetimes are not symmetric in conditional branches. A typical case is where a condition checks the presence of a value. In the positive branch, we have a reference to a value which is a part of the `map`, but in the negative branch, we do not. Therefore, it is safe to create a new reference in the negative branch. By _safe_, we mean that there will be only one reference pointing to the `map` object at any time. A convenient way to describe _at any time_ is to use the control flow graph (CFG) of the program.
 
 > ```rust
 > let mut map = ...;
@@ -134,11 +134,11 @@ One of those more advanced cases occurs when lifetimes are not symmetric in cond
 
 For more examples, see RFC 2094[@rfc2094nll]. However, the provided examples should be sufficient to demonstrate that analyzing the program on a control flow graph (CFG) instead of the syntactic structure (AST) enables the borrow checker to validate and ensure the safety of complex programs that were previously rejected.
 
-The above analysis thinks of lifetimes as regions (set of points in CFG) where the reference is valid. The goal of the analysis is to find the smallest regions so that the reference is not required to be valid outside of those regions. The smaller the regions, the more references can coexist at the same time, allowing more programs to be accepted.
+The above analysis thinks of lifetimes as regions (set of points in CFG) where the reference is valid. The goal of the analysis is to find the smallest regions so that the reference is not required to be valid outside of those regions. The smaller the regions, the more references can coexist at the same time, allowing more programs to be accepted. This approach is called NLL (non-lexical lifetimes) in rustc.
 
-The next generation of borrow checker in Rust is based on the Polonius analysis engine. Polonius is an extension of NLL (non-lexical lifetimes), which is capable of proving move programs to be safe by using a different interpretation of lifetimes.
+The next generation of borrow checker in Rust is based on the Polonius analysis engine. Polonius is an extension of NLL, which is capable of proving more programs to be safe by using a different interpretation of lifetimes.
 
-NLL cannot handle the following code, but Polonius can handle it. The problem here is that everything that is tied to external lifetimes (`'a`) has to be valid for the whole function. Since `v` is returned, it has to outlive the lifetime `'a`. However, the lifetime of `v` is bound to the lifetime of the reference to the hashmap it is stored in. It forces the `map` to be borrowed (transitively) for at least the whole function. This includes the `map.insert` call, which needs to borrow the hashmap itself, resulting in an error. However, we can clearly see that no reference to `map` is available in the `None` branch. Here Polonius can help.
+Unlike NLL, Polonius can handle the last example. In this scenario the problem is that everything that is tied to external lifetimes (`'a`) has to be valid for the whole function. Since `v` is returned, it has to outlive the lifetime `'a`. However, the lifetime of `v` is bound to the lifetime of the reference to the hashmap it is stored in. It forces the `map` to be borrowed (transitively) for at least the whole function. This includes the `map.insert` call, which needs to borrow the hashmap itself, resulting in an error. However, we can clearly see that no reference to `map` is available in the `None` branch. Here Polonius can help.
 
 Instead of starting with references and figuring out where they need to be valid, Polonius goes in the other direction and tracks what references need to be valid at each point in the program. As we have determined in the example above, there is no preexisting reference to the `map` in the `None` branch.
 
