@@ -48,22 +48,23 @@ Despite these improvements, two serious problems remain. First, programmers can 
 
 Rust's memory safety strategy builds upon the RAII approach, but it introduces a built-in static analysis, known as the borrow checker, to prevent the above-mentioned memory errors. To make the analysis feasible, Rust allows only a conservative subset of memory-safe operations. Furthermore, Rust adds additional limitations to ensure that memory use is safe even during multithreaded execution. Because these restrictions are very strict and would severely limit the language, Rust allows certain restrictions to be bypassed in _unsafe_ code blocks, placing the responsibility for maintaining safety invariants on the programmer.
 
-The key idea behind Rust's approach is the strict differentiation between ownership transfers and borrowing, achieved through its type system. An ownership transfer binds owned unique resources to another object, detaching them from the current object. This operation is called "move" in Rust (and C++). Unlike C++, Rust prohibits objects from holding references to themselves, simplifying ownership transfer to a mere bitwise copy. The Rust compiler also ensures the original object cannot be used after the move operation. 
+The key idea behind Rust's approach is the strict differentiation between ownership transfers and borrowing, achieved through its type system. An ownership transfer, called "move" in Rust (and C++), binds owned unique resources to another object, detaching them from the current object. This operation simplifies ownership transfer to a mere bitwise copy in Rust, unlike C++, and ensures the original object cannot be used after the move operation. 
 
-For borrows, Rust uses static analysis to ensure that any borrowed object is not deallocated during its use. In Rust terms, the borrowed object needs to _outlive_ the borrow. To keep analysis feasible, Rust limits it to individual functions, requiring programmers to formally describe the relationships of borrows within function inputs and outputs. To describe the relationships, Rust uses _lifetimes_. Lifetimes are a special kind of type parameter that can be used to describe a part of program where concerned references must be valid. Lifetimes work as inference variables, for which the compiler has to find a valid value (a subset of the program). Lifetime annotations are related to each other using the _outlives_ relationships, defining how one reference's lifetime is a subset of another. Throughout the history of borrow checking in Rust, multiple definitions of 
-_a subset of the program_ were used: expressions, control flow graph (CFG) points, and possibly used borrows. 
+For borrows, Rust uses static analysis to ensure that any borrowed object is not deallocated during its use, requiring the borrowed object to _outlive_ the borrow. This analysis is limited to individual functions to ensure analysis feasibility. Programmers are required to formally describe the relationships of borrows within function inputs and outputs using so-called _lifetimes_. Lifetimes are a special kind of type parameter that can be used to describe a part of program where concerned references must be valid. The reader can image a lifetime as an inference variables, for which the compiler has to find a valid value (a subset of the program). Lifetime annotations are related using _outlives_ relationships, indicating that one reference's lifetime is a subset of another.
 
-> **Example**: Consider a vector-like structure storing references to integers without owning them. First, we introduce a lifetime parameter `'a` representing the parts of program where the vector must be valid. This parameter will be substituted at a particular use site with a concrete lifetime.
+Throughout the history of borrow checking in Rust, the definition of _a subset of the program_ has evolved. Initially, it was based on expressions, then expanded to include control flow graph (CFG) points, and eventually to potentially used borrows.
+
+> **Example**: Consider a vector-like structure storing references to integers without owning them. We introduce a lifetime parameter `'a` representing the parts of the program where the vector must be valid. This parameter will be substituted with a concrete lifetime at each use site.
 >
 > ```rust
 > struct Vec<'a> { ... }
 > ```
 >
-> For the add method, a separate lifetime parameter `'b` restricts the inserted reference. Each method invocation substitutes `'b` with the concrete lifetime of the reference. The compiler needs to ensure that `'a` is a subset of `'b` (meaning `'b` outlives `'a`) by adding the `'b: 'a` constraint. This constraint guarantees that at any point as the vector exists, all references within it remain valid.
+> The add method has a separate lifetime parameter `'b` for the inserted reference. Each method invocation substitutes `'b` with the concrete lifetime of the reference. The compiler ensures `'b` outlives `'a` (imposed by the `'b: 'a` constraint), ensuring all references in the vector remain valid as long as the vector exists.
 >
 > ```rust
 > impl<'a> Vec<'a> {
->   fn add<'b> where 'a: 'b (&mut self, x: &'b i32) { ... }
+>   fn add<'b> where 'b: 'a (&mut self, x: &'b i32) { ... }
 > }
 > ```
 
