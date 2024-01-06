@@ -163,15 +163,16 @@ In the previous chapter, we mentioned that Polonius differs from NLL in its inte
 > ```
 > **Example:** The origin of the reference `r` (denoted as `'0`) is the set of loans `L0` and `L1`. Note that this fact is initially unknown and that it is the task of the analysis to compute it.
 
-The engine first pre-processes the input facts. It computes transitive closures of relations and analyzes all the initializations and deinitializations that occur over the CFG. Then, it checks for move errors, i.e. when ownership of some object is transferred more than once. In the next step, the liveness of variables and the "outlives" graph (transitive constraints of lifetimes at each CFG point) are computed[@polonius2]. All origins that appear in the type of live variable are considered live.
+Polonius begins by processing the input facts, computing transitive closures of relationships and analyzing variable initializations and deinitializations across the CFG. It then proceeds to identify move errors, where the ownership of an object is erroneously transferred multiple times. In the next step, it calculates the liveness of variables and the "outlives" graph (transitive constraints of lifetimes at each CFG point)[@polonius2]. All origins that appear in the type of live variable are considered live.
 
 [^pol1]: A contiguous growable array type from the Rust standard library. ([https://doc.rust-lang.org/std/vec/struct.Vec.html](https://doc.rust-lang.org/std/vec/struct.Vec.html))
 
-Then Polonius needs to figure out the _active loans_. A loan is active at a CFG point if two conditions hold. Any origin that contains the loan is live (i.e., there is a variable that might reference it), and the variable/place referencing the loan was not reassigned. (When a reference variable is reassigned, it points to something else.)
+The engine next determines _active loans_ based on two criteria: the liveliness of any origin containing the loan (i.e., there is a variable that might reference it) and the fact variable/place referencing the loan was not reassigned. 
 
-The compiler has to specify all the points in the control flow graph where a loan being alive would violate the memory safety rules. Polonius then checks whether such a situation can happen. If it can, it reports the facts involved in the violation. For example, if a mutable loan of a variable is alive, then any read/write/borrow operation on the variable invalidates the loan.
 
-![Steps performed by Polonius to find error. (Adapted from [@Stjerna2020].)](polonius.svg)
+The compiler has to specify all the points in the control flow graph where a loan being alive would violate the memory safety rules. Polonius then checks whether such a situation can happen, and if so, it reports the facts involved in the violation. For example, if a mutable loan of a variable is alive, then any read/write/borrow operation on the variable invalidates the loan.
+
+![Illustration of steps performed by Polonius to detect errors. (Adapted from [@Stjerna2020].)](polonius.svg)
 
 ## Polonius Facts
 
