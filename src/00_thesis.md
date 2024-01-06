@@ -202,7 +202,7 @@ This section outlines the facts that Polonius utilizes, offering a better idea o
     - `path_assigned_at_base: (Path, Point)` highlights where a specific path is assigned in the CFG.
     - `path_moved_at_base: (Path, Point)` marks the transfer of ownership of origins at a specific CFG point.
     - `path_accessed_at_base: (Path, Point)` indicates any memory access (read or write) to a path.
-    - 
+
 - Origin Relationships:
     - `known_placeholder_subset: (Origin, Origin)` constrains universal origins, representing loans from outside the function.
     - `universal_region: (Origin)` lists universal origins.
@@ -217,7 +217,7 @@ This section outlines the facts that Polonius utilizes, offering a better idea o
 
 # Comparison of Internal Representations
 
-The execution of a borrow checker with an external analysis engine consists of two steps. First, we need to collect the relevant information about the program. We will call that information _facts_. Second, we need to send those facts to the external engine and process them. Before we can discuss the _collection_ of facts itself, we need to understand how programs are represented inside the compiler. We will use the term _internal representation_ (IR) to refer to the representation of the program inside the compiler. We will compare the IRs used by rustc and gccrs to highlight the differences between the two compilers. This will help us understand the challenges of adapting the borrow checker design from rustc to gccrs. First, we will describe the IRs used by rustc and then compare them with those used in gccrs.
+Executing a borrow checker with an external analysis engine involves two key steps. The first is collecting relevant program information, referred to as _facts_. The second step is evaluation of these facts using the external engine. Before we can discuss the _collection_ of facts, a clear understanding of how programs are represented inside the compiler is essential. We will use the term _internal representation_ (IR) to refer to the representation of the program inside the compiler. We will compare the IRs used by rustc and gccrs to highlight the differences between the two compilers. This will help us understand the challenges of adapting the borrow checker design from rustc to gccrs. First, we will describe the IRs used by rustc and then compare them with those used in gccrs.
 
 ## GCC and LLVM
 
