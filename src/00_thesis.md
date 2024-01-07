@@ -495,7 +495,7 @@ In the second phase, the BIR is traversed along the CFG, and dynamic facts are c
 
 ### Subtyping and Variance
 
-In the basic interpretation of Rust language semantics (one used by programmers to reason about their code, not the one used by the compiler), lifetimes are part of the type and are always present. Lifetimes not explicitly mentioned are inferred in the same way as type parts (e.g., `let a = (_, i32) = (true, 5);` infers the type to `(bool, i32)`). In Rust, explicit lifetime annotations in a function correspond to borrows that occurred **outside** the function, implying that these lifetimes span the entire function body. Annotations for lifetimes that cover only part of the function body would be redundant, as borrows within a function are precisely analyzed by the borrow checker. Explicit annotations are used only to represent constraints from code outside the function's scope.
+In the basic interpretation of Rust language semantics (one used by programmers to reason about their code, not the one used by the compiler), lifetimes are part of the type and are always present. Lifetimes not explicitly mentioned are inferred in the same way as type parts (e.g., `let a = (_, i32) = (true, 5);` infers the type to `(bool, i32)`). In Rust, explicit lifetime annotations in a function correspond to borrows that occurred _outside_ the function, implying that these lifetimes span the entire function body. Annotations for lifetimes that cover only part of the function body would be redundant, as borrows within a function are precisely analyzed by the borrow checker. Explicit annotations are used only to represent constraints from code outside the function's scope.
 
 > ```rust
 >  let mut x;
@@ -507,7 +507,7 @@ In the basic interpretation of Rust language semantics (one used by programmers 
 > ```
 > **Example:** The type of `x` must be inferred to be a subtype of both `&'a T` and `&'b T`, ensuring safe use with all potential loans (here `a` or `b`).
 
-In Rust, unlike object-oriented languages like Java or C++, the only subtyping relationship, apart from identity, arises from lifetimes[^var3]. Two regions (representing lifetimes) can either be unrelated, subsets of each other in terms of CFG nodes (`'a: 'b`), or equal (resulting from `'a: 'b` and `'b: 'a`). The dependency of subtyping on the inner parameter is called variance.
+In Rust, unlike object-oriented languages like Java or C++, the only subtyping relationship, apart from identity, arises from lifetimes[^var3]. Two regions (representing lifetimes) can either be unrelated, subsets of each other in terms of loans or CFG points (`'a: 'b`), or equal (resulting from `'a: 'b` and `'b: 'a`). The dependency of subtyping on the inner parameter is called variance.
 
 [^var3]: During type inference computation, there can also be subtyping relations with general kinds of types (like <integer>), which is mostly used for literals without a type annotation, where we know it is "some kind" of integer, but we do not yet know which one.
 
@@ -523,7 +523,7 @@ Consider an example specific to lifetimes in Rust. With a simple reference type 
 
 [^var2]: A subset of CFG nodes.
 
-The situation is different when we pass a reference to a function as an argument. In that case, the lifetime parameter is contravariant. For function parameters, we need to ensure that the parameter lives as long as the function needs it to. For instance, a function pointer with the type `fn foo<'a>(x: &'a T)` can be coerced into `fn foo<'b>(x: &'b T)` if `'b` has a longer lifetime than `'a`. Such a transformation is safe as it narrows the range of acceptable values for the parameter `x`, thereby ensuring its validity throughout the function's execution.
+The situation is different when we pass a reference to a function as an argument. In that case, the lifetime parameter is contravariant. For function parameters, we need to ensure that the parameter lives as long as the function needs it to. For instance, a function pointer with the type `fn foo<'a>(x: &'a T)` can be coerced into `fn foo<'b>(x: &'b T)` if `'b: 'a`. Such a transformation is safe as it narrows the range of acceptable argument values for the parameter `x`.
 
 To visualize this concept, consider the following code snippet, where `'a` denotes a region safe for referencing the storage of `x`, and `'b` denotes a similar region for `y`. A function that operates correctly with a reference of lifetime `'b` is also guaranteed to work correctly with a reference of lifetime `'a`, since `'a` contains `'b`.
 
