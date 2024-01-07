@@ -328,7 +328,7 @@ Inside the HIR, after the type-checking analysis, TyTy types of nodes can be loo
 > **Example:** MIR dump
 > For further details, see the chapter "Source Code Representation" in [@devguide].
 
-## Rust GCC Resentation
+## Rust GCC Respentation
 
 This section discusses intermediate representations in gccrs. Since gccrs is a second implementation of the Rust compiler, it is heavily inspired by rustc. Therefore, this section assumes familiarity with the rustc intermediate representations, described in the previous section. We will focus on similarities and differences between rustc and gccrs, rather than describing the gccrs intermediate representation in full detail.
 
@@ -597,21 +597,21 @@ Once all types in the crate are processed, the constraints are solved using a fi
 
 ## Error Reporting
 
-As each function is analyzed separately, the compiler can easily report which functions violate the rules. Currently, only the kind of violation is communicated from the Polonius engine to the compiler. More detailed reporting is an issue for future work.
+As each function is analyzed separately, the compiler can easily report which functions violate the rules. Currently, only the kind of violation is communicated from the Polonius engine to the compiler. More detailed reporting is an area for future work.
 
-There are three possible ways for the more detailed reporting to be implemented.
+There are three possible approaches for implementing more detailed reporting:
 
-The first is to pass all the violations back to the compiler to be processed as a return value of the Polonius FFI invocation. This variant provides a simple separation of roles between the compiler and the analysis engine. However, it might be difficult to implement correctly with regard to memory ownership around the FFI boundary, since Polonius would need to allocate dynamically sized memory to pass the result. Polonius would need to implement a special API to release the memory.
+1. _Returning All Violations:_ This method involves passing all violations back to the compiler as a return value of the Polonius FFI invocation. It offers a clear separation of roles between the compiler and the analysis engine. However, implementing this correctly could be challenging due to memory ownership concerns at the FFI boundary. Polonius would need to allocate dynamically sized memory for the result and provide an API for its release.
 
-The second variant is to pass a callback function to report the errors found to the Polonius engine, which would be called for each violation. However, Polonius only has information in terms of the enumerated nodes of the control flow graph. Therefore, a pointer to an instance of the borrow checker would need to be passed to the Polonius engine to be used in combination with the callback to resolve the nodes to the actual code. The separation of roles, where Polonius and Polonius FFI are used just as external computation engines, is broken.
+2. _Callback Function for Error Reporting:_ Another option is to provide the Polonius engine with a callback function to report each found error. But, as Polonius only possesses information in terms of the enumerated nodes of the control flow graph, a pointer to an instance of the borrow checker would also need to be passed. This pointer would be used in conjunction with the callback to map nodes back to the actual code. However, this approach compromises the separation of roles, where Polonius and Polonius FFI act solely as external computation engines.
 
-A compromise between these variants would be to provide Polonius with callback functions, which would send the violations to the compiler one by one, leaving the allocation on the compiler side only.
+3. _Compiler-Side Allocation via Callback Functions:_ A compromise between these two methods would be to supply Polonius with callback functions that relay violations to the compiler one at a time, keeping memory allocation on the compiler side.
 
-Moreover, the borrow checker currently does not store information to map the nodes back to the source code locations. This issue is clearly technical only, and the functionality can be added easily with local changes only. Since this work has an experimental character, work on the analysis itself was prioritized over more detailed error reporting.
+Additionally, the borrow checker does not currently store information to trace the nodes back to their source code locations. This limitation is purely technical and can be addressed straightforwardly with localized changes. Given the experimental nature of this work, the focus has been on analysis over detailed error reporting.
 
-The final stage of the development of the borrow checker would be to implement heuristics to guess the reason for the error and suggest possible fixes.
+The final stage in developing the borrow checker would involve implementing heuristics to infer the reasons for errors and suggest potential fixes.
 
-## Implementation
+# Implementation
 
 After the initial experiments described in @sec:analysis-of-the-fact-collection-problem, the project was implemented in the following phases: First, an initial version of the borrow checker IR (BIR), lowering from HIR to BIR (the BIR builder), and a textual BIR dump were implemented. Second, the first version of the BIR fact collection and the Polonius FFI were added. At this stage, the first simple error detections were tested. Next, the implementation was extended to handle more complex data types, especially generics. Finally, the BIR fact collection was extended to handle the new information and emit all available facts.
 
