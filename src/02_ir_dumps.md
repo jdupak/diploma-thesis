@@ -1,29 +1,21 @@
 # Rustc Intermediate Representations Examples
 
-> **Compilation commands:**
->
-> `$ rustc -Z unpretty=ast-tree`
-> 
-> `$ rustc -Z unpretty=hir-tree`
-> 
-> `$ rustc -Z unpretty=mir -Z identify-regions`
-
 ## Rust Source Code
 
 ```rust
-    struct Foo(i32);
+struct Foo(i32);
 
-    fn foo(x: i32) -> Foo {
-        Foo(x)
-    }
+fn foo(x: i32) -> Foo {
+    Foo(x)
+}
 ```
 
-\clearpage
 
 ## Abstract Syntax Tree (AST)
 
-```
+> `$ rustc -Z unpretty=ast-tree`
 
+```text
 Fn {
     defaultness: Final,
     generics: Generics {
@@ -169,13 +161,11 @@ Fn {
 }
 ```
 
-\normalsize
-
 ## High-Level Intermediate Representation (HIR)
 
-\small
+> `$ rustc -Z unpretty=hir-tree`
 
-```
+```text
 Fn(
     FnSig {
         header: FnHeader {
@@ -341,9 +331,9 @@ Expr {
 }
 ```
 
-\normalsize
-
 ## Mid-Level Intermediate Representation (MIR)
+
+> `$ rustc -Z unpretty=mir -Z identify-regions`
 
 ```
 fn foo(_1: i32) -> Foo {

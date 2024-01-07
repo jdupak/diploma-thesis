@@ -760,6 +760,8 @@ I believe that the Rust programming language will play a significant role in sys
 
 \appendix
 
+\cleardoublepage
+
 # References
 
 ::: {#refs}
