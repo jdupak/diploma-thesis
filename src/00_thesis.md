@@ -509,7 +509,7 @@ In the basic interpretation of Rust language semantics (one used by programmers 
 
 In Rust, unlike object-oriented languages like Java or C++, the only subtyping relationship, apart from identity, arises from lifetimes[^var3]. Two regions (representing lifetimes) can either be unrelated, subsets of each other in terms of CFG nodes (`'a: 'b`), or equal (resulting from `'a: 'b` and `'b: 'a`). The dependency of subtyping on the inner parameter is called variance.
 
-[^var3]: During type inference computation, there can also be subtyping relations with general kinds of types (like <integer>),which is mostly used for literals without a type annotation, where we know it is "some kind" of integer, but we do not yet know which one.
+[^var3]: During type inference computation, there can also be subtyping relations with general kinds of types (like <integer>), which is mostly used for literals without a type annotation, where we know it is "some kind" of integer, but we do not yet know which one.
 
 > **Definition** [@reference]
 > 
@@ -544,8 +544,7 @@ For non-generic types, variance is directly derived from the type definition. Ho
 
 ### Variance of Generic Types
 
-Generic type variance can be derived from either the type's usage or its definition[@Altidor2011]. Rustc employs definition-site variance for generic types, meaning variance is computed from the type's definition rather than its usage in functions. The situation becomes complicated when a generic type is used within another type, possibly in a recursive manner. In such cases, variance requires computation via a fixed-point algorithm, referred to as "variance analysis".
-
+Generic type variance can be derived from either the type's usage or its definition[@Altidor2011]. Rustc employs definition-site variance for generic types, meaning variance is computed from the type's definition, rather than its usage in functions. The situation becomes complicated when a generic type is used within another type, possibly in a recursive manner. In such cases, variance requires computation via a fixed-point algorithm, referred to as "variance analysis".
 
 #### Variance Analysis
 
