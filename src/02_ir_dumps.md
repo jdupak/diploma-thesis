@@ -1,3 +1,5 @@
+\cleardoublepage
+
 # Rustc Intermediate Representations Examples
 
 ## Rust Source Code

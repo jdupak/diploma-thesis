@@ -2,7 +2,7 @@ lang: en
 link-citations: true
 link-bibliography: true
 nocite: "@*"
-classoption: twoside,symmetric
+classoption: twoside
 fontsize: "11pt"
 mainfont: "Latin Modern Roman"
 mainfontoptions:

@@ -2,6 +2,17 @@
 title: "Memory Safety Analysis in Rust GCC"
 author: "Jakub Dupák"
 date: "January 2024"
+title-meta: 'Memory Safety Analysis in Rust GCC'
+author-meta: 'Jakub Dupák'
+date-meta: '8. January 2024'
+subject: "Master's Thesis"
+keywords:
+- 'Rust'
+- 'GCC'
+- 'Polonius'
+- 'borrow checker'
+- 'static analysis'
+- 'compiler'
 header-includes:
     - \input{../template/style.tex}
     - \input{../template/front.tex} 
@@ -21,7 +32,7 @@ include-before:
     - \abstract{This thesis presents the first attempt to implement a memory safety analysis, known as the borrow checker, within the Rust GCC compiler. It utilizes the Polonius engine, which was designed as the next-generation borrow checker for rustc. The text describes the design of this analysis, the necessary modifications of the compiler, and compares the internal representations between rustc and gccrs. This comparison highlights the challenges in adapting the rustc borrow checker design to gccrs. The thesis concludes with a discussion of the results and known limitations.}{compiler, Rust, borrow checker, static analysis, GCC, Polonius}{Tato práce představuje první pokus o realizaci analýzy paměťové bezpečnosti, nazývané borrow-checker, v překladači Rust GCC. Analýza využívá systém Polonius, který je vytvořen jako nová generace borrow-checkeru pro překladač rustc. Práce popisuje návrh analýzy, úprav překladače a porovnává vnitřní reprezentaci překladačů rustc a gccrs a poukazuje na problémy při adaptaci návrhu borrow-checkeru z překladače rustc na překladač gccrs. Práci uzavírá diskusí o výsledcích a známých omezeních.}{překladač, Rust, borrow checker, statická analýza, GCC, Polonius}
 ---
 
-\clearpage
+\cleardoublepage
 \pagenumbering{arabic}
 
 # Introduction
@@ -219,6 +230,10 @@ This section outlines the facts that Polonius utilizes, offering a better idea o
 
 Executing a borrow checker with an external analysis engine involves two key steps. The first is collecting relevant program information, referred to as _facts_. The second step is the evaluation of these facts using the external engine. Before we can discuss the _collection_ of facts, we need a clear understanding of how programs are represented inside the compiler. We will use the term _internal representation_ (IR) to refer to the representation of the program inside the compiler. We will compare the IRs used by rustc and gccrs to highlight the differences between the two compilers. This will help us understand the challenges of adapting the borrow checker design from rustc to gccrs. First, we will describe the IRs used by rustc and then compare them with those used in gccrs.
 
+\vskip 5mm
+
+![Comparison of compiler pipelines with a focus on internal representations](./pipeline.svg){ width=80% }
+
 ## GCC and LLVM
 
 To understand the differences between each of the compilers, we must first explore the differences between the compiler platforms on which they are built (GCC and LLVM). We will only focus on the middle-end of each platform, since the back-end does not directly influence the front-end development.
@@ -241,16 +256,6 @@ The key takeaway from this section is that rustc has to transform the tree-based
 
 In the previous section, we have seen that rustc is responsible for transforming the code from the raw text to the LLVM IR. Given the high complexity of the Rust language, rustc uses multiple intermediate representations (IRs) to simplify the process (see the diagram below). The text is first tokenized and parsed into an abstract syntax tree (AST), and then transformed into the high-level intermediate representation (HIR). For transformation into a middle-level intermediate representation (MIR), the HIR is first transformed into a typed HIR (THIR). The MIR is then transformed into the LLVM IR.
 
-![Comparison of compiler pipelines with a focus on internal representations](./pipeline.svg){ width=75% }
-
-AST is a tree-based representation of the program, closely following each source code token. At this stage, rustc performs macro-expansion and a partial name resolution (macros and imports) [@devguide [^rustc1] [^rustc2]]. As the AST is lowered to HIR, some complex language constructs are desugared to simpler constructs. For example, various types of loops are transformed into a single infinite loop construct (Rust `loop` keyword), and many structures that can perform pattern matching (`if let`, `while let`, `?` operator) are transformed into the `match`` construct[@reference [^rustc3]].
-
-[^rustc1]: [https://rustc-dev-guide.rust-lang.org/macro-expansion.html](https://rustc-dev-guide.rust-lang.org/macro-expansion.html)
-
-[^rustc2]: [https://rustc-dev-uide.rust-lang.org/name-resolution.html](https://rustc-dev-uide.rust-lang.org/name-resolution.html)
-
-[^rustc3]: [https://doc.rust-lang.org/reference/expressions/if-expr.html#if-let-expressions](https://doc.rust-lang.org/reference/expressions/if-expr.html#if-let-expressions)
-
 > ```rust
 > struct Foo(i31);
 > 
@@ -258,29 +263,33 @@ AST is a tree-based representation of the program, closely following each source
 >     Foo(x)
 > }
 > ```
-> **Example:** This simple code snippet will serve as our example throughout this section.
+> **Example:** This code snippet will serve us as example throughout this section.
+
+
+AST is a tree-based representation of the program, closely following each source code token. At this stage, rustc performs macro-expansion and a partial name resolution (macros [^rustc1] and imports[^rustc2]) [@devguide]. As the AST is lowered to HIR, some complex language constructs are desugared to simpler constructs. For example, various types of loops are transformed into a single infinite loop construct (Rust `loop` keyword), and many structures that can perform pattern matching (`if let`, `while let`, `?` operator) are transformed into the `match`` construct[@reference [^rustc3]].
+
+[^rustc1]: [https://rustc-dev-guide.rust-lang.org/macro-expansion.html](https://rustc-dev-guide.rust-lang.org/macro-expansion.html)
+
+[^rustc2]: [https://rustc-dev-uide.rust-lang.org/name-resolution.html](https://rustc-dev-uide.rust-lang.org/name-resolution.html)
+
+[^rustc3]: [https://doc.rust-lang.org/reference/expressions/if-expr.html#if-let-expressions](https://doc.rust-lang.org/reference/expressions/if-expr.html#if-let-expressions)
 
 >```text
 > Fn {
 >   generics: Generics { ... },
 >   sig: FnSig {
 >     header: FnHeader { ... },
->       decl: FnDecl {
->         inputs: [
->           Param {
->             ty: Ty {
->               Path { segments: [ PathSegment { ident: i32#0 } ] }
->             }
->             pat: Pat { Ident(x#0) }
->           },
->         ],
->         output: Ty {
->             Path { segments: [ PathSegment { ident: Foo#0 } ]
->         }
->       },
->   },
+>     decl: FnDecl {
+>       inputs: [
+>         Param {
+>           ty: Ty { 
+>             Path { segments: [ PathSegment { ident: i32#0 } ] }
+>           }
+>           pat: Pat { Ident(x#0) }
+>         },
+>       ],
+>       output: Ty { Path { segments: [ PathSegment { ident: Foo#0 } ] }
 >   ... 
-> }
 >```
 > **Example:** This is a textual representation of a small and simplified part of the abstract syntax tree (AST) of the example program. The full version can be found in the [appendix](#abstract-syntax-tree-ast).
 
@@ -524,14 +533,11 @@ In Rust, unlike object-oriented languages like Java or C++, the only subtyping r
 >
 > `F<T>` is invariant over `T` otherwise (no subtyping relation can be derived)
 
-Consider an example specific to lifetimes in Rust. With a simple reference type `&'a T`, the lifetime parameter `'a` is covariant. This implies that a reference `&'a T` can be safely coerced into `&'b T` if `'a` is a subtype of `'b`. In practical terms, if it is safe to dereference a reference at any point during the period `'a`, it remains safe throughout the shorter period `'b`, given `'b` is a subset of `'a` [^var2].
-
-[^var2]: A subset of CFG nodes.
+Consider an example specific to lifetimes in Rust. With a simple reference type `&'a T`, the lifetime parameter `'a` is covariant. This implies that a reference `&'a T` can be safely coerced into `&'b T` if `'a` is a subtype of `'b`. In practical terms, if it is safe to dereference a reference at any point during the period `'a`, it remains safe throughout the shorter period `'b`, given `'b` is a subset of `'a`.
 
 The situation is different when we pass a reference to a function as an argument. In that case, the lifetime parameter is contravariant. For function parameters, we need to ensure that the parameter lives as long as the function needs it to. For instance, a function pointer with the type `fn foo<'a>(x: &'a T)` can be coerced into `fn foo<'b>(x: &'b T)` if `'b: 'a`. Such a transformation is safe because it narrows the range of acceptable argument values for the parameter `x`.
 
 To visualize this concept, consider the following code snippet, where `'a` denotes a region safe for referencing the storage of `x`, and `'b` denotes a similar region for `y`. A function that operates correctly with a reference of lifetime `'b` is also guaranteed to work correctly with a reference of lifetime `'a`, since `'a` contains `'b`.
-
 
 > ```rust
 >  let x = 5;        // region 'a
@@ -652,7 +658,7 @@ The main bottleneck in the current implementation is the BIR builder. After cove
 
 ### BIR and BIR Builder {#sec:bir-and-bir-builder}
 
-- Currently, only nongeneric functions are supported (not closures or [associated functions and methods](https://doc.rust-lang.org/nightly/reference/items/associated-items.html#associated-functions-and-methods)). Other function-like items require special top-level handling, though their body handling is identical. Generic functions must be monomorphised before checking.
+- Currently, only non-generic functions are supported (not closures or [associated functions and methods](https://doc.rust-lang.org/nightly/reference/items/associated-items.html#associated-functions-and-methods)). Other function-like items require special top-level handling, though their body handling is identical. Generic functions must be monomorphised before checking.
 - Method calls are not handled due to the required implicit coercion of the `self` argument.
 - The `?` operator and `while let` are not addressed. They will be removed at the `AST->HIR` boundary.
 - Handling for `if let` and `match` expressions is missing, particularly for pattern detection (variant selection). Pattern destructuring is mostly implemented for `let` expressions and function parameters. The [`or` pattern](https://doc.rust-lang.org/reference/patterns.html#or-patterns) is unsupported, as is pattern declaration without an initial value, except for [identifier patterns](https://doc.rust-lang.org/reference/patterns.html#identifier-patterns).
@@ -697,7 +703,7 @@ The latest source code is available in the author's [fork](https://github.com/jd
 
 Detailed instructions for building gccrs are in the `README.md` file in the project's root directory. For tips on a better development experience (e.g., faster builds), refer to [@svp].
 
-The compiler binary is named `crab1`, and it is located in the `gcc` directory within the chosen build directory. Since gccrs is still experimental, the flag `-frust-incomplete-and-experimental-compiler-do-not-use` is required to use the compiler. To enable the borrow checker, add the `-frust-borrowcheck` flag. Any detected borrow checker errors will be reported as standard compilation errors.
+The gccrs binary is named `crab1`, and it is located in the `gcc` directory within the chosen build directory. When built from the `borrowck-stage2` branch the binary will automatically include the borrow checker. Since gccrs is still experimental, the flag `-frust-incomplete-and-experimental-compiler-do-not-use` is required to use the compiler. To enable the borrow checker, add the `-frust-borrowcheck` flag. Any detected borrow checker errors will be reported as standard compilation errors.
 
 > ```text
 > $ crab1 -frust-incomplete-and-experimental-compiler-do-not-use \
@@ -709,7 +715,7 @@ The compiler binary is named `crab1`, and it is located in the `gcc` directory w
       | ^~ 
 > ```
 
-For a deeper inspection of the borrow checker, a debug build of the compiler is necessary. The `-frust-debug` flag enables debug logs, including the borrow checker activity. Unfortunately, GCC's debug logging lacks category filtering. The reader may find the variance analysis log, the borrow checker log (BIR build and fact collector), and Polonius debug output particularly interesting. This flag also activates the BIR dump (saved to `./bir_dump/<crate_name?>/<function_name?>.bir.dump`) and _facts_ dump (saved to `nll_facts_gccrs/<function_name>.facts`). 
+The `-frust-debug` flag enables debug logs, including the borrow checker activity. Unfortunately, GCC's debug logging lacks category filtering. The reader may find the variance analysis log, the borrow checker log (BIR build and fact collector), and Polonius debug output particularly interesting. This flag also activates the BIR dump (saved to `./bir_dump/<crate_name?>/<function_name?>.bir.dump`) and _facts_ dump (saved to `nll_facts_gccrs/<function_name>.facts`). 
 
 > ```text
 > crab1: note: Variance analysis solving started:
@@ -735,13 +741,12 @@ For a deeper inspection of the borrow checker, a debug build of the compiler is 
 > crab1: note: 	_0 = Assignment(_10) at 0:11
 > crab1: note: 	Sanitize field .0 of Point{Point {x:isize, y:isize}}
 > crab1: note: 	Sanitize deref of & Point{Point {x:isize, y:isize}}
-> crab1: note: 	Sanitize field .0 of Point{Point {x:isize, y:isize}}
 > ```
 
 To obtain a similar output from rustc, use the flags `-Znll-facts -Zdump-mir=nll -Zidentify-regions`. With a debug build of rustc, you can also enable the borrow checker debug log using the environment variable `RUSTC_LOG=rustc_borrowck`. Building rustc is described in the [Rustc Developer Guide](https://rustc-dev-guide.rust-lang.org/building/how-to-build-and-run.html).
 
 
-For more advanced debugging and inspection, gdb/lldb can be used as usual. A common issue with LLDB is its difficulty in correctly identifying virtual classes. To address this, a simple LLDB formatter for resolving TyTy classes based on internal identifiers is available in [this gist](https://gist.github.com/jdupak/68af0f0ad91f3e6eba2c478dc4f662dd). This script can be used as a template and can be adapted to other classes suffering from this problem.
+For more advanced debugging and inspection, gdb/lldb can be used as usual. A common issue with LLDB is its difficulty to correctly identify virtual classes. To address this, a simple LLDB formatter for resolving TyTy classes based on internal identifiers is available in [this gist](https://gist.github.com/jdupak/68af0f0ad91f3e6eba2c478dc4f662dd). This script can be used as a template and can be adapted to other classes suffering from this problem.
 
 
 # Conclusion
