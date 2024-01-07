@@ -686,7 +686,7 @@ The main bottleneck of the current implementation is the BIR builder. After cove
 
 ## Building, Usage, and Debugging
 
-This section provides the reader with basic information on how to build gccrs and use the borrow checker. It also provides tips for debugging.
+This section provides the reader with references and basic information regarding how to build gccrs and use the borrow checker. It also provides tips for debugging.
 
 The latest source code is available in the author's [fork](https://github.com/jdupak/gccrs/) in the branch [`borrowck-stage2`](https://github.com/jdupak/gccrs/tree/borrowck-stage2).
 
@@ -746,16 +746,17 @@ For more complex debugging and inspection, gdb/lldb can be used as usual. One is
 
 # Conclusion
 
-This project aimed to implement a prototype of a Polonius-based borrow checker for Rustc GCC to explore the feasibility of this approach and establish code infrastructure for further development. The development was conducted in a [personal fork](https://github.com/jdupak/gccrs/) of Rust GCC, and stabilized parts are being integrated to the main [Rustc GCC GitHub repository](https://github.com/Rust-GCC/gccrs). All accepted changes are scheduled to be integrated in the [central GCC repository](https://gcc.gnu.org/git/) by the maintainers of Rust CGG with the help of the author.
+This project aimed to implement a prototype of a Polonius-based borrow checker for Rustc GCC to explore the feasibility of this approach and establish a code infrastructure for further development. The development was conducted in a [personal fork](https://github.com/jdupak/gccrs/) of Rust GCC, and stabilized parts are being integrated into the main [Rustc GCC GitHub repository](https://github.com/Rust-GCC/gccrs). All accepted changes are scheduled to be integrated into the [central GCC repository](https://gcc.gnu.org/git/) by the maintainers of Rust GCC with the help of the author.
 
-This text described the problem of borrow checking, mapped the situation in rustc and gccrs, and presented the design of the solution, as well as the experiments that led to this design. 
-The prototype version of the implemented borrow checker can detect most of the common errors in simple Rust code. Those include violations of access rules (number of allowed loans of a given type, loan/access conflicts), move/initialization errors, and subset errors. Examples of detected errors can be found in the appendix.
+This text described the problem of borrow checking, mapped the situation in rustc and gccrs, and presented the design of the solution, as well as the experiments that led to it. 
+The prototype version of the implemented borrow checker can detect most common errors in simple Rust code. These include violations of access rules (number of allowed loans of a given type, loan/access conflicts), move/initialization errors, and subset errors. Examples of detected errors can be found in the appendix.
 
-The last chapter provides an overview of the prototype's limitations. The limitations are not fundamental and should be possible to resolve by simple extensions and implementation of missing cases in the existing code. Future work should address this limitation to provide a production-ready solution. 
+The last chapter provides an overview of the prototype's limitations. These limitations are not fundamental and should be resolvable with simple extensions and implementation of missing cases in the existing code. Future work should address these limitations to provide a production-ready solution. 
 
-Given the complex nature of borrow checking, a comprehensive, fully functional solution will likely take months, if not years, of future work. This project provides a significant stepping stone on the way to a production ready solution, as it provides extensive infrastructure for further development and solutions to most of the hard problems that were identified in the analysis.
+Given the complex nature of borrow checking, a comprehensive, fully functional solution is likely to take months, if not years, of future work. This project provides a significant stepping stone toward a production-ready solution, offering extensive infrastructure for further development and solutions to most of the challenging problems identified in the analysis.
 
-I believe that the Rust programming language will play a significant role in systems programming, and I would like to continue working on this project, other problems in Rustc GCC, or the rustc compiler itself. It would seem that there is considerable interest in the industry as well. Bradley Spengler, President of Open Source Security, Inc., one of two main sponsors of Rust GCC, expressed interest in financially supporting my continued work on Rust GCC.
+I believe that the Rust programming language will play a significant role in systems programming, and I would like to continue working on this project, on other problems in Rustc GCC, or on the rustc compiler itself. There appears to be considerable interest in the industry as well. Bradley Spengler, President of Open Source Security, Inc., one of the two main sponsors of Rust GCC, has expressed interest in financially supporting my continued work on Rust GCC.
+
 
 \appendix
 
