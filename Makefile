@@ -1,5 +1,5 @@
 PDF_ENGINE=tectonic
-CITATION_FLAGS=--bibliography=bibliography.bib --csl=../template/ieee.csl --citeproc
+CITATION_FLAGS=--bibliography=bibliography.bib --csl=../template/iso690-numeric-en.csl --citeproc
 STYLE_FLAGS=--highlight-style=monochrome --number-sections
 DOC_FLAGS=-V documentclass=report -V links-as-notes --top-level-division=chapter
 FILTERS=--filter pandoc-crossref

@@ -765,3 +765,12 @@ I believe that the Rust programming language will play a significant role in sys
 ::: {#refs}
 :::
 
+## Used Software
+
+In accordance with the [_Methodological guideline No. 5/2023_](https://www.cvut.cz/sites/default/files/content/d1dc93cd-5894-4521-b799-c7e715d3c59e/en/20231003-methodological-guideline-no-52023.pdf), the following software was used in the development of this thesis:
+
+- [GitHub Copilot](https://github.com/features/copilot) (with disabled suggestions matching public code) for improved autocompletion of code (Used only to complete the current line, not to generate any larger code structures.)
+- [ChatGPT (OpenAI)](https://chat.openai.com/) for text style feedback and rephrasing suggestions
+- [Grammarly](https://www.grammarly.com/) for grammar and spelling checking
+- [Writefull](https://www.writefull.com/) for style and grammar checking
+- [Grazie Pro (JetBrains)](https://plugins.jetbrains.com/plugin/16136-grazie-pro) for grammar and spelling checking

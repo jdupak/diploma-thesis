@@ -320,7 +320,7 @@
       <key variable="citation-number"/>
     </sort>
     <layout>
-      <text variable="citation-number" display="left-margin" suffix=". "/>
+      <text variable="citation-number" display="left-margin" prefix="[" suffix="]"/>
       <choose>
         <if type="book map" match="any">
           <group display="right-inline">
