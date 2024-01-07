@@ -686,13 +686,13 @@ The main bottleneck of the current implementation is the BIR builder. After cove
 
 ## Building, Usage, and Debugging
 
-This section provides the reader with references and basic information regarding how to build gccrs and use the borrow checker. It also provides tips for debugging.
+This section provides references and basic information on how to build gccrs and use the borrow checker, along with tips for debugging.
 
-The latest source code is available in the author's [fork](https://github.com/jdupak/gccrs/) in the branch [`borrowck-stage2`](https://github.com/jdupak/gccrs/tree/borrowck-stage2).
+The latest source code is available in the author's [fork](https://github.com/jdupak/gccrs/) on the branch [`borrowck-stage2`](https://github.com/jdupak/gccrs/tree/borrowck-stage2).
 
-Detailed instructions on how to build gccrs can be found in the `README.md` in the root of the project. For tips on a better development experience (e.g., faster builds), the reader can refer to [@svp].
+Detailed instructions for building gccrs are in the `README.md` file in the project's root directory. For tips on a better development experience (e.g., faster builds), refer to [@svp].
 
-The compiler binary is called `crab1`, and after building, it is located in the `gcc` directory in the chosen build directory. Since gccrs is still very experimental, a special flag `-frust-incomplete-and-experimental-compiler-do-not-use` needs to be added to use the compiler. Subsequently, the `-frust-borrowcheck` flag needs to be used to enable the borrow checker. If any borrow checker error is detected, it will be reported as a standard compilation error.
+The compiler binary is named `crab1`, and it is located in the `gcc` directory within the chosen build directory after building. Since gccrs is still experimental, the flag `-frust-incomplete-and-experimental-compiler-do-not-use` is required to use the compiler. To enable the borrow checker, add the `-frust-borrowcheck` flag. Any detected borrow checker errors will be reported as standard compilation errors.
 
 > ```text
 > $ crab1 -frust-incomplete-and-experimental-compiler-do-not-use \
@@ -704,7 +704,7 @@ The compiler binary is called `crab1`, and after building, it is located in the 
       | ^~ 
 > ```
 
-To further inspect the working of the borrow checker, a debug build of the compiler is needed. The flag `-frust-debug` enables debug logs that include the work of the borrow checker. Unfortunately, the GCC debug logging does not support filtering by category. Three parts may interest the reader: log of the variance analysis, log of the borrow checker (BIR build and fact collector), and debug output of Polonius. This flag also enables the BIR dump (saved to `./bir_dump/<crate_name?>/<function_name?>.bir.dump`) and facts dump (saved to `nll_facts_gccrs/<function_name>.facts`). 
+For a deeper inspection of the borrow checker, a debug build of the compiler is necessary. The `-frust-debug` flag enables debug logs, including the borrow checker activity. Unfortunately, GCC's debug logging lacks category filtering. The reader may find the variance analysis log, the borrow checker log (BIR build and fact collector), and Polonius debug output particularly interesting. This flag also activates the BIR dump (saved to `./bir_dump/<crate_name?>/<function_name?>.bir.dump`) and _facts_ dump (saved to `nll_facts_gccrs/<function_name>.facts`). 
 
 > ```text
 > crab1: note: Variance analysis solving started:
@@ -733,16 +733,11 @@ To further inspect the working of the borrow checker, a debug build of the compi
 > crab1: note: 	Sanitize field .0 of Point{Point {x:isize, y:isize}}
 > ```
 
-> ```rust
-> Subsets:
->  Mid(bb0[3]): {
->      2 <= 1
->  }
-> ```
+To obtain similar output from rustc, use the flags `-Znll-facts -Zdump-mir=nll -Zidentify-regions`. With a debug build of rustc, you can also enable the borrow checker debug log using the environment variable `RUSTC_LOG=rustc_borrowck`. Building rustc is described in the [Rustc Developer Guide](https://rustc-dev-guide.rust-lang.org/building/how-to-build-and-run.html).
 
-To get the corresponding output from rustc, use flags `-Znll-facts -Zdump-mir=nll -Zidentify-regions`. With a debug build of rustc, the reader can also enable the debug log of the borrow checker using the environmental variable `RUSTC_LOG=rustc_borrowck`. Building of the rustc compiler is described in the [Rustc Developer Guide](https://rustc-dev-guide.rust-lang.org/building/how-to-build-and-run.html).
 
-For more complex debugging and inspection, gdb/lldb can be used as usual. One issue the reader may encounter is that LLDB might not be able to identify virtual classes correctly. A simple LLDB formatter to resolve TyTy classes based on internal identifiers can be found in [this gist](https://gist.github.com/jdupak/68af0f0ad91f3e6eba2c478dc4f662dd). 
+For more advanced debugging and inspection, gdb/lldb can be used as usual. A common issue with LLDB is its difficulty in correctly identifying virtual classes. To address this, a simple LLDB formatter for resolving TyTy classes based on internal identifiers is available in [this gist](https://gist.github.com/jdupak/68af0f0ad91f3e6eba2c478dc4f662dd). This script can be used as a template and can be adapted to other classes suffering from this problem.
+
 
 # Conclusion
 
