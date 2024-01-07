@@ -495,7 +495,7 @@ In the second phase, the BIR is traversed along the CFG, and dynamic facts are c
 
 ### Subtyping and Variance
 
-In the basic interpretation of Rust language semantics (one used by programmers to reason about their code, not the one used by the compiler), lifetimes are part of the type and are always present. If a lifetime is not mentioned in the program explicitly, it is inferred the same way as a part of type would be (e.g., `let a = (_, i32) = (true, 5);` completes the type to `(bool, i32)`) Note that it is actually impossible to write those lifetimes. In the Rust program, all explicit lifetime annotations correspond to any borrow that occurred **outside** the function, and therefore, it is alive for the whole body of the function. Explicit lifetime annotations corresponding to regions that span only a part of the function body would be pointless. Borrows inside a function can be analyzed precisely by the borrow checker. Explicit annotations are only used to represent constraints following from the code that the borrow checker cannot see.
+In the basic interpretation of Rust language semantics (one used by programmers to reason about their code, not the one used by the compiler), lifetimes are part of the type and are always present. Lifetimes not explicitly mentioned are inferred in the same way as type parts (e.g., `let a = (_, i32) = (true, 5);` infers the type to `(bool, i32)`). In Rust, explicit lifetime annotations in a function correspond to borrows that occurred **outside** the function, implying that these lifetimes span the entire function body. Annotations for lifetimes that cover only part of the function body would be redundant, as borrows within a function are precisely analyzed by the borrow checker. Explicit annotations are used only to represent constraints from code outside the function's scope.
 
 > ```rust
 >  let mut x;
@@ -505,12 +505,11 @@ In the basic interpretation of Rust language semantics (one used by programmers 
 >      x = b; // b: &'b T
 >  }
 > ```
->
-> **Example:** We need to infer the type of x, so that it is a subtype of both `&'a T` and `&'b T`. We need to make sure that if we further use x, that is safe with regard to all loans it can contain (here `a` or `b`).
+> **Example:** The type of `x` must be inferred to be a subtype of both `&'a T` and `&'b T`, ensuring safe use with all potential loans (here `a` or `b`).
 
-In Rust, unlike object-oriented languages like Java or C++, the only subtyping relation other than identity is caused by lifetimes[^var3]. Two regions (corresponding to lifetimes) can be unrelated, a subset of each other (in terms of a set of CFG nodes) (denoted `'a: 'b`), or equal (typically a result of `'a: 'b` and `'b: 'a`). The dependency of subtyping on the inner parameter is called variance.
+In Rust, unlike object-oriented languages like Java or C++, the only subtyping relationship, apart from identity, arises from lifetimes[^var3]. Two regions (representing lifetimes) can either be unrelated, subsets of each other in terms of CFG nodes (`'a: 'b`), or equal (resulting from `'a: 'b` and `'b: 'a`). The dependency of subtyping on the inner parameter is called variance.
 
-[^var3]: During the type inference computation, there can also be a subtyping relation with a general kind of types (like <integer>), which is mostly used for literals without a type annotation, where we know it is "some kind" of integer, but we do not yet know which one
+[^var3]: During type inference computation, there can also be subtyping relations with general kinds of types (like <integer>),which is mostly used for literals without a type annotation, where we know it is "some kind" of integer, but we do not yet know which one.
 
 > **Definition** [@reference]
 > 
@@ -520,36 +519,33 @@ In Rust, unlike object-oriented languages like Java or C++, the only subtyping r
 >
 > `F<T>` is invariant over `T` otherwise (no subtyping relation can be derived)
 
-Let us see what that means on an example specific to lifetimes. For a simple reference type `&'a T`, the lifetime parameter `'a` is covariant. This means that if we have a reference `&'a T` we can coerce it to
-`&'b T`, then `'a` is a subtype of `'b`. In other words, if we are storing a reference to some memory, it is sound to assign it to a reference that lives for a shorter period of time. That is, if it is safe to dereference a reference within any point of period `'a`, it is also safe to dereference it within any point of period `'b`, (`'`b` is a subset of `'`a`) [^var2].
+Consider an example specific to lifetimes in Rust. With a simple reference type `&'a T`, the lifetime parameter `'a` is covariant. This implies that a reference `&'a T` can be safely coerced into `&'b T` if `'a` is a subtype of `'b`. In practical terms, if it's safe to dereference a reference at any point during the period `'a`, it remains safe throughout the shorter period `'b`, given `'b` is a subset of `'a` [^var2].
 
 [^var2]: A subset of CFG nodes.
 
-The situation is different when we pass a reference to a function as an argument. In that case, the lifetime parameter is contravariant. For function parameters, we need to ensure that the parameter lives as long as the function needs it to. If we have a function pointer of type `fn foo<'a>(x: &'a T)`, we can coerce it to `fn foo<'b>(x: &'b T)`, where `'b` lives longer than `'a`. This conversion is safe because it only restricts the possible values of the parameter `x`.
+The situation is different when we pass a reference to a function as an argument. In that case, the lifetime parameter is contravariant. For function parameters, we need to ensure that the parameter lives as long as the function needs it to. For instance, a function pointer with the type `fn foo<'a>(x: &'a T)` can be coerced into `fn foo<'b>(x: &'b T)` if `'b` has a longer lifetime than `'a`. Such a transformation is safe as it narrows the range of acceptable values for the parameter `x`, thereby ensuring its validity throughout the function's execution.
 
-Let us look at that visually. In the following code, we have region `'a`, where it is safe to reference the storage of `x`, and region `'b` where it is safe to reference the storage of `y`. If a function safely works with a reference of lifetime `'b`, it will also safely work with a reference of lifetime `'a`.
+To visualize this concept, consider the following code snippet, where `'a` denotes a region safe for referencing the storage of `x`, and `'b` denotes a similar region for `y`. A function that operates correctly with a reference of lifetime `'b` is also guaranteed to work correctly with a reference of lifetime `'a`, since `'a` contains `'b`.
+
 
 > ```rust
->
 >  let x = 5;        // region 'a
 >  {                 //
 >      let y = 7;    //            // region 'b        
 >  }                 //
->
 > ```
 
 The return type of the function is effectively an assignment to a local variable (just across function boundaries) and therefore is covariant.
 
+
 The situation becomes interesting when the two rules are combined. Let us have a function `fn foo<'a>(x: &'a T) -> &'a T`. The return type requires the function to be covariant over `'a`, while the parameter requires it to be contravariant. This is called *invariance*.
 
-For non-generic types, its variance immediately follows from the type definition. For generic types, the situation is more complex.
+For non-generic types, variance is directly derived from the type definition. However, variance in generic types is more complex and subject to different approaches.
 
 ### Variance of Generic Types
 
-There are multiple approaches to the variance of generic types. It can be either derived from the usage of the type or its definition[@Altidor2011]. For non-generic types, use-site variance is used.[^gvar1]
-For generic types, Rust uses definition-site variance. This means that the variance is computed solely from the definition of the type (effectively, usage constraint to the body of the type), not from its usage (inside functions). The situation becomes complicated when a generic type is used inside another generic type, possibly even in a recursive fashion. In that situation, the variance has to be computed using a fixed-point algorithm (further referred to as the "variance analysis").
+Generic type variance can be derived from either the type's usage or its definition[@Altidor2011]. Rustc employs definition-site variance for generic types, meaning variance is computed from the type's definition rather than its usage in functions. The situation becomes complicated when a generic type is used within another type, possibly in a recursive manner. In such cases, variance requires computation via a fixed-point algorithm, referred to as "variance analysis".
 
-[^gvar1]: For `&'a T`, if the reference is used as a function parameter, it is contravariant; if it is used as a return type, it is covariant.
 
 #### Variance Analysis
 
