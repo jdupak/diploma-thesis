@@ -396,38 +396,44 @@ Inside TyTy, lifetimes are represented in the following ways. Named lifetimes ar
 
 ## Borrow Checker IR Design
 
-The borrow checker IR (BIR) is a three-address code representation designed to be close to a subset of the rustc MIR. Like MIR, it represents the body of a single function (or a function-like item, for example, a closure), since borrow checking is performed on each function separately. It ignores particular operations and merges them into a few abstract operations that focus on data flow.
+The Borrow Checker Intermediate Representation (BIR) is a three-address code representation, designed to closely resemble a subset of rustc's Mid-level Intermediate Representation (MIR). Like MIR, it represents the body of a single function (or function-like item, such as a closure), with borrow checking performed on each function separately. It abstracts specific operations into a few key operations that focus on data flow.
 
 > ```rust
-> fn fib(_1: usize) -> i32 {
+> fn fib(_2: u32) -> u32 {
 >     bb0: {
->         _4 = Operator(_1, const usize);
->         switchInt(_4) -> [bb1, bb2];
+>     0    StorageLive(_3);
+>     1    StorageLive(_5);
+>     2    _5 = _2;
+>     3    StorageLive(_6);
+>     4    _6 = Operator(move _5, const u32);
+>     5    switchInt(move _6) -> [bb1, bb2];
 >     }
 > 
->     // ... (rest of the code)
+>    // ... (omitted for brevity) 
 > 
->     bb6: {
->         _8 = Operator(_1, const usize);
->         _9 = Call(fib)(_8, ) -> [bb7];
+>     bb5: {
+>     0    StorageLive(_14);
+>     1    _14 = _2;
+>     2    StorageLive(_15);
+>     3    _15 = Operator(move _14, const u32);
+>     4    StorageLive(_16);
+>     5    _16 = Call(fib)(move _15) -> [bb6];
 >     }
 > 
->     bb7: {
->         _10 = Operator(_7, _9);
->         _2 = _10;
->         goto -> bb8;
->     }
+>     // ... (omitted for brevity)
 > 
 >     bb8: {
->         _0 = _2;
->         return;
+>     0    StorageDead(_9);
+>     // ... (omitted for brevity) 
+>     4    StorageDead(_3);
+>     5    return;
 >     }
 > }
 > ```
 >
-> **Example:** A shortened example of a BIR dump of a simple Rust program. The program computes the nth Fibonacci number.
-> The source code, full dump, and legend can be found in [_appendix C_](#appendix-c-bir-dump-example).
-> This example comes from the "BIR Design Notes" document, which is part of the source tree and provides an introduction to developers getting familiar with the basic aspects of the borrow checker implementation.
+> **Example:** The following example shows a shortened BIR dump of a simple Rust program computing the nth Fibonacci number.
+> The source code and full dump are available in [_appendix C_](#appendix-c-bir-dump-example).
+> This example comes from the "BIR Design Notes" document, part of the source tree, offering an introduction to the borrow checker implementation.
 
 The BIR of a single function is composed of basic metadata about the function (such as arguments, return type, or explicit lifetimes), a list of basic blocks, and a list of places.
 
@@ -466,7 +472,7 @@ It is important to highlight that different fields are assigned to different pla
 
 ## BIR Building
 
-The BIR is built by visiting the HIR tree of the function. There are specialized visitors for expressions and statements, patterns, and a top-level visitor that handles function headers (arguments, return, lifetimes, etc.). Whenever a new place is created in the compilation database, a list of fresh regions[^bir2] is created for it. At this point, we need to figure out the number of lifetimes mentioned in a type. For basic types, this is achieved by traversing the type and counting the number of lifetime parameters. For generic types, the inner structure is ignored, and only the lifetime and type parameters are considered. Note that the type parameters can be generic, creating a structure known as [higher-kinded](https://rustc-dev-guide.rust-lang.org/what-does-early-late-bound-mean.html#early-and-late-bound-parameter-definitions) lifetimes. This counting is performed (as a side product) during the variance analysis (explained below) to simplify the type traversing code. All types are independently queried for each node from the HIR (they are not derived inside the BIR).
+BIR construction involves visiting the High-Level Intermediate Representation (HIR) tree of the function. There are specialized visitors for expressions, statements, and patterns, as well as a top-level visitor for handling function headers. Whenever a new place is created in the compilation database, a list of fresh regions[^bir2] is generated. Counting the number of lifetimes to be generated involves traversing the type structure. For generic types, the inner structure is ignored and only the lifetime and type parameters are considered. Note that the type parameters can be also generic, creating a structure known as [higher-kinded](https://rustc-dev-guide.rust-lang.org/what-does-early-late-bound-mean.html#early-and-late-bound-parameter-definitions). All types are independently queried for each node from the HIR, instead of being derived within the BIR.
 
 [^bir2]: In this text, we use the term lifetime for the syntactic object in the code and region for the semantic object in the analysis. It is called a region because it represents a set of points in the control flow graph (CFG). At this point, the set is not yet known. It is the main task of the borrow checker analysis engine to compute the set of points for each region.
 
@@ -478,7 +484,7 @@ BIR building itself is fairly straightforward. However, some extra handling was 
 
 ## BIR Fact Collection and Checking
 
-The BIR fact collection extracts the Polonius facts from the BIR and performs additional checks. Polonius is responsible for checking lifetime (region) constraints, moves, and conflicts between borrows. For lifetimes, it checks that the constraints are satisfied and that all required constraints are present in the program. For moves, it checks that each place is moved at most once. For borrows, it checks that any two conflicting borrows (e.g., two mutable borrows of the same place) are not alive at the same time. Sets of conflicting borrows have to be supplied to Polonius manually. The borrow checker itself is responsible for violations that are not control-flow sensitive, like modification of an immutably borrowed place or moving from behind a reference.
+The BIR fact collection process extracts Polonius facts from the BIR and conducts additional checks. Polonius is tasked with verifying lifetime (region) constraints, ensuring each place is moved at most once, and checking that illegal accesses are not made to borrow memory locations. The collection process involves two phases: gathering static facts from the place database and universal region constraints, and traversing the BIR along the CFG to collect dynamic facts.
 
 The fact collection is performed in two phases. First, static facts are collected from the place database. These include universal region constraints (constraints corresponding to lifetime parameters of the function) collected during BIR construction and facts collected from the place database. Polonius needs to know which places correspond to variables and which form paths (see the definition below). Furthermore, it needs to sanitize fresh regions of places that are related (e.g., a field and a parent variable) by adding appropriate constraints between them. The relations of the regions depend on the variance of the region within the type. (See Variance Analysis below.)
 
