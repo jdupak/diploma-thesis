@@ -36,7 +36,7 @@ The first chapter introduces the problem of borrow checking. It gives a brief ov
 
 This section introduces the concept of borrow checking and traces its development within the Rust programming language. It presents the simple lexical approach, followed by an explanation of a more advanced control-flow sensitive analysis and an introduction to the Polonius analysis engine, the latest approach to borrow checking in Rust. Since this work utilizes the Polonius engine, it is described in more detail in the following chapter.
 
-Typical programming language implementations manage memory with dynamic storage duration in one of two ways[^bc1]. Languages like C employ manual memory management, where programmers explicitly allocate and free memory, a method prone to errors[@nsa]. In contrast, higher-level languages such as Java and Python use automatic memory management, where runtime garbage collectors handle memory management tasks. 
+Typical programming language implementations manage memory with dynamic storage duration in one of two ways[^bc1]. Languages like C employ manual memory management, where programmers explicitly allocate and free memory, a method prone to errors[@nsa]. In contrast, higher-level languages such as Java and Python employ automatic memory management, where runtime garbage collectors handle memory management tasks. 
 
 Addressing the pitfalls of manual memory management, languages like C++ and [Zig](https://ziglang.org/) have introduced tools for more implicit memory deallocation. In simple situations, these tools tie memory deallocation to the destruction of objects, utilizing concepts like [RAII](https://en.cppreference.com/w/cpp/language/raii), [smart-pointers](https://en.cppreference.com/w/cpp/memory#Smart_pointers), and [defer statements](https://ziglang.org/documentation/master/#defer). Here, the key difference from stack allocation is that the ownership can be dynamically transferred between objects. In more complex situations, where multiple objects share memory and deallocation is tied to the last object's destruction, these languages opt-in for runtime solutions like [reference counting](https://en.wikipedia.org/wiki/Reference_counting).
 
@@ -72,7 +72,7 @@ Throughout Rust's borrow checking development, the interpretation of _a subset o
 
 This section describes how the analysis evolved, gradually rejecting less memory-safe programs. Rustc started with lexical (scope-based analysis), followed by the first non-lexical (CFG-based) analysis, which is being extended by the Polonius project. This section strongly builds upon RFC 2094[@rfc2094nll], which introduced non-lexical borrow checking to Rust. Examples from the RFC are presented in this section.
 
-The simplest variant of borrow checker is based on stack variable scopes. A reference is valid from the point in the program (here in terms of statements and expressions) where it is created until the end of the current scope. This approach can be extended to handle some common programming patterns as special cases. For example, when a reference is created in function parameters, it is valid until the end of the function call.
+The simplest variant of borrow checker is based on stack variable scopes. A reference is valid from the point in the program, in terms of statements and expressions, where it is created until the end of the current scope. This approach can be extended to handle some common programming patterns as special cases. For example, when a reference is created in function parameters, it is valid until the end of the function call.
 
 > ```rust
 > {
@@ -163,7 +163,7 @@ In the previous chapter, we mentioned that Polonius differs from NLL in its inte
 > ```
 > **Example:** The origin of the reference `r` (denoted as `'0`) is the set of loans `L0` and `L1`. Note that this fact is initially unknown and that it is the task of the analysis to compute it.
 
-Polonius begins by processing the input facts, computing transitive closures of relationships and analyzing variable initializations and deinitializations across the CFG. It then proceeds to identify move errors, where the ownership of an object is erroneously transferred multiple times. In the next step, it calculates the liveness of variables and the "outlives" graph (transitive constraints of lifetimes at each CFG point)[@polonius2]. All origins that appear in the type of live variable are considered live.
+Polonius begins by processing the input facts, computing transitive closures of relationships and analyzing variable initializations and deinitializations across the CFG. Subsequently, it identifies move errors, which occur when an object's ownership is erroneously transferred multiple times. In the next step, it calculates the liveness of variables and the "outlives" graph (transitive constraints of lifetimes at each CFG point)[@polonius2]. All origins that appear in the type of live variable are considered live.
 
 [^pol1]: A contiguous growable array type from the Rust standard library. ([https://doc.rust-lang.org/std/vec/struct.Vec.html](https://doc.rust-lang.org/std/vec/struct.Vec.html))
 
@@ -284,7 +284,7 @@ AST is a tree-based representation of the program, closely following each source
 >```
 > **Example:** This is a textual representation of a small and simplified part of the abstract syntax tree (AST) of the example program. The full version can be found in the [appendix](#abstract-syntax-tree-ast).
 
-The HIR is rustc primary representation, and it is used for most operations[@devguide, HIR] It combines a simplified AST with additional tables for quick access to additional information, such as expression and statement types. These tables are used for analysis passes, including full name resolution and type checking. Type checking includes verification type correctness, inference, and resolving of implicit type-dependent constructs[@devguide [^hir2]].
+The HIR is rustc's primary representation, and it is used for most operations[@devguide, HIR] It combines a simplified AST with additional tables for quick access to additional information, such as expression and statement types. These tables are used for analysis passes, including full name resolution and type checking. Type checking includes verification type correctness, inference, and resolving of implicit type-dependent constructs[@devguide [^hir2]].
 
 [^hir2]: [https://rustc-dev-guide.rust-lang.org/type-checking.html](https://rustc-dev-guide.rust-lang.org/type-checking.html)
 

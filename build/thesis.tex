@@ -240,7 +240,7 @@ Modern Roman}
 \clearpage
 \pagenumbering{arabic}
 
-\chapter{Introduction}\label{introduction}
+\chapter{Introduction}\label{sec:introduction}
 
 Rust is a modern systems programming language that aims to provide
 memory safety without runtime
@@ -289,15 +289,15 @@ chapter elaborates on the implementation, its development, the current
 state and the known missing features and limitations.
 
 \chapter{The Problem of Borrow
-Checking}\label{the-problem-of-borrow-checking}
+Checking}\label{sec:the-problem-of-borrow-checking}
 
 This section introduces the concept of borrow checking and traces its
-development within the Rust programming language. First, it presents the
-simple lexical approach, followed by an explanation of a more advanced
-control-flow sensitive analysis. Finally, the section then provides an
-introduction to the Polonius analysis engine, the latest approach to
-borrow checking in Rust. Since this work utilizes the Polonius engine,
-it is described in more detail in the following chapter.
+development within the Rust programming language. It presents the simple
+lexical approach, followed by an explanation of a more advanced
+control-flow sensitive analysis and an introduction to the Polonius
+analysis engine, the latest approach to borrow checking in Rust. Since
+this work utilizes the Polonius engine, it is described in more detail
+in the following chapter.
 
 Typical programming language implementations manage memory with dynamic
 storage duration in one of two ways\footnote{Dynamic storage duration
@@ -339,66 +339,54 @@ memory management models\footnote{An interface between a C++ application
   transferred, and some of them do not. These methods can only be
   differentiated using their documentation.}. Second, issue appears when
 the ownership is not transferred, but a copy of the pointer is used
-temporarily (this is called ``borrowing'' in Rust). The assumption that
-the owning object will exist for the whole time this copy is used is
-often wrong. This kind of mistake is called a ``dangling
-pointer.''\citeproc{ref-danglingpointer}{{[}6{]}}.
+temporarily (this is called \emph{borrowing} in Rust). The assumption
+that the owning object will exist for the whole time this copy is used
+is often wrong. This kind of mistake is called a \emph{dangling
+pointer}.\citeproc{ref-danglingpointer}{{[}6{]}}.
 
-The Rust language builds on the RAII approach; however, it adds a
-built-in static analysis called the borrow checker to ensure that the
-errors mentioned above cannot occur. To make such an analysis feasible,
-Rust only allows a conservative subset of memory-safe operations.
-Furthermore, Rust adds further limitations to ensure that memory use is
-safe even during multithreaded execution. Because these restrictions are
-very strict and would severely limit the language, Rust provides a
-feature to lift some of those restrictions in clearly denoted ``unsafe''
-areas. The responsibility for maintaining the safety invariants in
-``unsafe'' code falls on the programmer.
+Rust's memory safety strategy builds upon the RAII approach, but it
+introduces a built-in static analysis, known as the borrow checker, to
+prevent the above-mentioned memory errors. To make the analysis
+feasible, Rust allows only a conservative subset of memory-safe
+operations. Furthermore, Rust adds additional limitations to ensure that
+memory use is safe even during multithreaded execution. Because these
+restrictions are very strict and would severely limit the language, Rust
+allows certain restrictions to be bypassed in \emph{unsafe} code blocks,
+placing the responsibility for maintaining safety invariants on the
+programmer.
 
-The key idea behind Rust memory safety is to strictly (using the type
-system) differentiate the two problematic cases: ownership transfers and
-borrowings. The ownership transfer binds all unique resources owned to
-another object, detaching them from the current object. This operation
-is called ``move'' in Rust (and C++). Unlike C++, Rust does not allow
-objects to store a reference to themselves, simplifying the ownership
-transfer semantics to just a bitwise copy. Rust static analysis also
-ensures that the old object is not used after it has been ``moved
-from.''
+The key idea behind Rust's approach is the strict differentiation
+between ownership transfers and borrowing, achieved through its type
+system. An ownership transfer, called ``move'' in Rust (and C++), binds
+owned unique resources to another object, detaching them from the
+current object. Rust simplifies this operation to a mere bitwise copy by
+restricting objects from storing a reference to itself. It also ensures
+the original object cannot be used after the move operation.
 
-Borrowing is a temporary usage of an object without ownership transfer.
-A typical example is a method call. For borrows, Rust uses static
-analysis to ensure that the borrowed object cannot be deallocated while
-in use (in Rust terms, the borrowed object has to \emph{outlive} the
-borrow). However, since a whole-program analysis would be very
-expensive, Rust performs the analysis only inside a single function. It
-requires the programmer to formally describe the invariants of lifetimes
-(subsets of the program where each reference has to be valid) on a
-function boundary. Invariants are checked inside the function and
-assumed outside the function, resulting in a safe program. The
-invariants are described using what are called lifetime annotations. The
-programmer can think of a lifetime annotation as an inference variable.
-The variable domain represents a subset of the program (set of lines,
-expressions, or control flow graph nodes). The task of the borrow
-checker is to resolve each inference variable to an actual subset of the
-program where the borrow is valid. This subset may not be unique. The
-existence of such a subset is sufficient to prove that the program is
-safe.
+For borrows, Rust uses static analysis to ensure that any borrowed
+object is not deallocated during its use, requiring the borrowed object
+to \emph{outlive} the borrow. This analysis is limited to individual
+functions to ensure analysis feasibility. Programmers are required to
+formally describe the relationships of borrows within function inputs
+and outputs using so-called \emph{lifetimes}. Lifetimes are a special
+kind of type parameter that can be used to describe a part of program
+where concerned references must be valid. One can image a lifetime as an
+inference variables, for which the compiler has to find a valid value (a
+subset of the program). Lifetime annotations are related using
+\emph{outlives} relationships, indicating that one reference's lifetime
+is a subset of another.
 
-The annotations are related to each other by ``outlives'' relations,
-which require one reference lifetime to be a subset of another lifetime.
-These constraints are used to describe the relationship of the inputs
-and outputs of a function, providing a simplified and conservative
-description of all relevant code outside of the function.
+Throughout Rust's borrow checking development, the interpretation of
+\emph{a subset of the program} has evolved. Initially it was based on
+expressions, then control flow graph (CFG) points, and later potentially
+used borrows.
 
 \begin{quote}
-\textbf{Example}: We have a vector-like structure (a dynamic array) and
-we want to store references to integers as elements. We need to make
-sure that as long as the vector exists, all references stored in it are
-valid. However, we do not want the vector to own the integers. First, we
-introduce a lifetime parameter \texttt{\textquotesingle{}a}, which
-represents all the regions where the vector itself is alive. This
-parameter will be substituted at a particular use site with a concrete
-lifetime.
+\textbf{Example}: Consider a vector-like structure storing references to
+integers without owning them. We introduce a lifetime parameter
+\texttt{\textquotesingle{}a} to represent the parts of the program where
+the vector must be valid, substituted with a concrete lifetime at each
+use site.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -406,25 +394,19 @@ lifetime.
 \end{Highlighting}
 \end{Shaded}
 
-Then, for the add method, we introduce a lifetime parameter
-\texttt{\textquotesingle{}b}, which restricts the inserted reference.
-This parameter is substituted with a concrete lifetime of each reference
-when the method is invoked. Finally, we will require that the method can
-only be used with lifetimes, for which we can guarantee that
-\texttt{\textquotesingle{}b} is a subset of \texttt{\textquotesingle{}a}
-(in terms of parts of the program). We do that by adding the
-\texttt{\textquotesingle{}a:\ \textquotesingle{}b} constraint.
-\texttt{\textquotesingle{}a:\ \textquotesingle{}b} usually reads as
-``\texttt{\textquotesingle{}a} outlives '\texttt{b},'' and it means that
-``'a lasts at least as long as 'b, so a reference
-\texttt{\&\textquotesingle{}a\ i32} is valid whenever
-\texttt{\&\textquotesingle{}b\ i32} is
-valid.''\href{https://doc.rust-lang.org/reference/trait-bounds.html\#lifetime-bounds}{\citeproc{ref-reference}{{[}7{]}}}
+The add method has a separate lifetime parameter
+\texttt{\textquotesingle{}b} for the inserted reference. Each method
+invocation substitutes \texttt{\textquotesingle{}b} with the concrete
+lifetime of the reference. The compiler ensures
+\texttt{\textquotesingle{}b} outlives \texttt{\textquotesingle{}a}
+(imposed by the \texttt{\textquotesingle{}b:\ \textquotesingle{}a}
+constraint), ensuring all references in the vector remain valid as long
+as the vector exists.
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{impl}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}} \DataTypeTok{Vec}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}} \OperatorTok{\{}
-  \KeywordTok{fn}\NormalTok{ add}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}b}\OperatorTok{\textgreater{}} \KeywordTok{where} \OtherTok{\textquotesingle{}a}\OperatorTok{:} \OtherTok{\textquotesingle{}b}\NormalTok{ (}\OperatorTok{\&}\KeywordTok{mut} \KeywordTok{self}\OperatorTok{,}\NormalTok{ x}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}b} \DataTypeTok{i32}\NormalTok{) }\OperatorTok{\{} \OperatorTok{...} \OperatorTok{\}}
+  \KeywordTok{fn}\NormalTok{ add}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}b}\OperatorTok{\textgreater{}} \KeywordTok{where} \OtherTok{\textquotesingle{}b}\OperatorTok{:} \OtherTok{\textquotesingle{}a}\NormalTok{ (}\OperatorTok{\&}\KeywordTok{mut} \KeywordTok{self}\OperatorTok{,}\NormalTok{ x}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}b} \DataTypeTok{i32}\NormalTok{) }\OperatorTok{\{} \OperatorTok{...} \OperatorTok{\}}
 \OperatorTok{\}}
 \end{Highlighting}
 \end{Shaded}
@@ -433,12 +415,12 @@ valid.''\href{https://doc.rust-lang.org/reference/trait-bounds.html\#lifetime-bo
 \section{The Evolution of Borrow Checking in Rustc}\label{sec:evolution}
 
 This section describes how the analysis evolved, gradually rejecting
-less memory-safe programs. rustc started with lexical (scope-based
+less memory-safe programs. Rustc started with lexical (scope-based
 analysis), followed by the first non-lexical (CFG-based) analysis, which
 is being extended by the Polonius project. This section strongly builds
-upon RFC 2094\citeproc{ref-rfc2094nll}{{[}8{]}}, which introduced
-non-lexical borrow checking to Rust. Examples from that RFC are
-presented in this section.
+upon RFC 2094\citeproc{ref-rfc2094nll}{{[}7{]}}, which introduced
+non-lexical borrow checking to Rust. Examples from the RFC are presented
+in this section.
 
 The simplest variant of borrow checker is based on stack variable
 scopes. A reference is valid from the point in the program (here in
@@ -484,11 +466,11 @@ variable \texttt{slice}.
 \end{Shaded}
 \end{quote}
 
-Now, there is no simple way to say when the lifetime of the reference
-should end to prove that his program is safe from its syntactic
-structure. This code can be fixed by explicitly specifying where the
-lifetime should end. However, this clutters up the code and cannot be
-used for more advanced cases.
+There is no simple way to determine (from the syntactic structure) when
+the lifetime of the reference should end to prove that his program is
+safe. This code can be fixed by explicitly specifying where the lifetime
+should end. However, this clutters the code and cannot be used for more
+advanced cases.
 
 \begin{quote}
 \begin{Shaded}
@@ -509,12 +491,13 @@ used for more advanced cases.
 
 One of those more advanced cases occurs when lifetimes are not symmetric
 in conditional branches. A typical case is where a condition checks the
-presence of a value. In the positive branch, we have a reference to the
-value, but in the negative branch, we do not. Therefore, it is safe to
-create a new reference in the negative branch. By ``safe,'' we mean that
-there will be only one reference pointing to the \texttt{map} object at
-any time. A convenient way to describe ``at any time'' is to use the
-control flow graph (CFG) representation of the program.
+presence of a value. In the positive branch, we have a reference to a
+value which is a part of the \texttt{map}, but in the negative branch,
+we do not. Therefore, it is safe to create a new reference in the
+negative branch. By \emph{safe}, we mean that there will be only one
+reference pointing to the \texttt{map} object at any time. A convenient
+way to describe \emph{at any time} is to use the control flow graph
+(CFG) of the program.
 
 \begin{quote}
 \begin{Shaded}
@@ -532,7 +515,7 @@ control flow graph (CFG) representation of the program.
 \end{Shaded}
 \end{quote}
 
-For more examples, see RFC 2094\citeproc{ref-rfc2094nll}{{[}8{]}}.
+For more examples, see RFC 2094\citeproc{ref-rfc2094nll}{{[}7{]}}.
 However, the provided examples should be sufficient to demonstrate that
 analyzing the program on a control flow graph (CFG) instead of the
 syntactic structure (AST) enables the borrow checker to validate and
@@ -543,14 +526,15 @@ where the reference is valid. The goal of the analysis is to find the
 smallest regions so that the reference is not required to be valid
 outside of those regions. The smaller the regions, the more references
 can coexist at the same time, allowing more programs to be accepted.
+This approach is called NLL (non-lexical lifetimes) in rustc.
 
 The next generation of borrow checker in Rust is based on the Polonius
-analysis engine. Polonius is an extension of NLL (non-lexical
-lifetimes), which is capable of proving move programs to be safe by
-using a different interpretation of lifetimes.
+analysis engine. Polonius is an extension of NLL, which is capable of
+proving more programs to be safe by using a different interpretation of
+lifetimes.
 
-NLL cannot handle the following code, but Polonius can handle it. The
-problem here is that everything that is tied to external lifetimes
+Unlike NLL, Polonius can handle the last example. In this scenario the
+problem is that everything that is tied to external lifetimes
 (\texttt{\textquotesingle{}a}) has to be valid for the whole function.
 Since \texttt{v} is returned, it has to outlive the lifetime
 \texttt{\textquotesingle{}a}. However, the lifetime of \texttt{v} is
@@ -576,12 +560,12 @@ that it replaces many handwritten checks with formal logical rules.
 Also, because it knows which references are conflicting, it can be used
 to provide better error messages.
 
-\chapter{Polonius Engine}\label{polonius-engine}
+\chapter{Polonius Engine}\label{sec:polonius-engine}
 
 The Polonius engine was created by
 \href{https://github.com/nikomatsakis}{Niko Matsakis} and extended by
 \href{https://github.com/lqd/}{Rémy Rakic} and Albin
-Stjerna\citeproc{ref-Stjerna2020}{{[}9{]}} as a next-generation
+Stjerna\citeproc{ref-Stjerna2020}{{[}8{]}} as a next-generation
 control-flow sensitive borrow checking analysis for rustc. It was
 designed as an independent library that can be used both by the rustc
 compiler and by different research projects, making it suitable for
@@ -616,174 +600,188 @@ where the references that are used could have originated.
 task of the analysis to compute it.
 \end{quote}
 
-The engine first pre-processes the input facts. It computes transitive
-closures of relations and analyzes all the initializations and
-deinitializations that occur over the CFG. Then, it checks for move
-errors, i.e.~when ownership of some object is transferred more than
-once. In the next step, the liveness of variables and the ``outlives''
-graph (transitive constraints of lifetimes at each CFG point) are
-computed\citeproc{ref-polonius2}{{[}10{]}}. All origins that appear in
-the type of live variable are considered live.
+Polonius begins by processing the input facts, computing transitive
+closures of relationships and analyzing variable initializations and
+deinitializations across the CFG. It then proceeds to identify move
+errors, where the ownership of an object is erroneously transferred
+multiple times. In the next step, it calculates the liveness of
+variables and the ``outlives'' graph (transitive constraints of
+lifetimes at each CFG point)\citeproc{ref-polonius2}{{[}9{]}}. All
+origins that appear in the type of live variable are considered live.
 
-Then Polonius needs to figure out the \emph{active loans}. A loan is
-active at a CFG point if two conditions hold. Any origin that contains
-the loan is live (i.e., there is a variable that might reference it),
-and the variable/place referencing the loan was not reassigned. (When a
-reference variable is reassigned, it points to something else.)
+The engine next determines \emph{active loans} based on two criteria:
+the liveliness of any origin containing the loan (i.e., there is a
+variable that might reference it) and the fact variable/place
+referencing the loan was not reassigned.
 
 The compiler has to specify all the points in the control flow graph
 where a loan being alive would violate the memory safety rules. Polonius
-then checks whether such a situation can happen. If it can, it reports
+then checks whether such a situation can happen, and if so, it reports
 the facts involved in the violation. For example, if a mutable loan of a
 variable is alive, then any read/write/borrow operation on the variable
 invalidates the loan.
 
 \begin{figure}
 \centering
-\includesvg{polonius.svg}
-\caption{Steps performed by Polonius to find error. (Adapted from
-\citeproc{ref-Stjerna2020}{{[}9{]}}.)}
+\includesvg[width=0.77\textwidth,height=\textheight]{polonius.svg}
+\caption{Illustration of steps performed by Polonius to detect errors.
+(Adapted from \citeproc{ref-Stjerna2020}{{[}8{]}}.)}
 \end{figure}
 
-\section{Polonius Facts}\label{polonius-facts}
+\section{Polonius Facts}\label{sec:polonius-facts}
 
-This section provides a list of facts taken by Polonius to give the
-reader a better idea of the work that the compiler needs to do. The
-facts are grouped into categories and briefly described. The full list
-of facts can be found in the
+This section outlines the facts that Polonius utilizes, offering a
+better idea of the work that the compiler needs to do. These facts are
+categorized and briefly explained. For an exhaustive list, refer to the
 \href{https://github.com/rust-lang/polonius/blob/master/polonius-engine/src/facts.rs}{Polonius
-source code} and the Polonius Book\citeproc{ref-polonius}{{[}11{]}}.
+source code} and the Polonius Book\citeproc{ref-polonius}{{[}10{]}}.
 
 \begin{itemize}
 \tightlist
 \item
-  Control flow graph edges (\texttt{cfg\_edge:\ (Point,\ Point)}).
-\item
-  Facts regarding variable usage and its effects.
+  Atoms:
 
   \begin{itemize}
   \tightlist
   \item
-    \texttt{var\_used\_at:\ (Variable,\ Point)} - Any usage of a
-    variable except for a drop (destructor).
+    \texttt{Point} is a CFG point.
   \item
-    \texttt{var\_defined\_at:\ (Variable,\ Point)} - Start of scope or
-    reassignment. This reassignment treatment makes the variable act
-    similarly to an
-    \href{https://en.wikipedia.org/wiki/Static_single-assignment_form}{SSA
-    variable}.
+    \texttt{Variable} is a variable in the program.
   \item
-    \texttt{var\_dropped\_at:\ (Variable,\ Point)} - Drop (destructor
-    call) of the variable.
+    \texttt{Path} is a memory location in the program.
   \item
-    \texttt{use\_of\_var\_derefs\_origin:\ (Variable,\ Origin)} - The
-    type of the variable contains the origin.
+    \texttt{Origin} is a set of loans that can be referenced using a
+    variable at each CFG point. It is the interpretation of lifetimes
+    used by Polonius.
   \item
-    \texttt{drop\_of\_var\_derefs\_origin:\ (Variable,\ Origin)} - When
-    the drop implementation used the origin.
+    \texttt{Loan} is a result of a borrow expression.
   \end{itemize}
 \item
-  Facts regarding paths and their usages. Paths represent indirect or
-  partial access to a variable (e.g., field access or cast).
+  Control Flow Graph:
 
   \begin{itemize}
   \tightlist
   \item
-    \texttt{path\_is\_var:\ (Path,\ Variable)} - Lists ``trivial'' paths
-    that are just a variable.
-  \item
-    \texttt{child\_path:\ (Path,\ Path)} - Describes hierarchical
-    (nontransitive) relationships between paths. For example, a field
-    path is a child path of the variable path from which it is accessed.
-  \item
-    \texttt{path\_assigned\_at\_base:\ (Path,\ Point)} - The path is
-    assigned at the CFG point. ``base'' means that this fact is emitted
-    only for the exact path used, not all its parent paths.
-  \item
-    \texttt{path\_moved\_at\_base:\ (Path,\ Point)} - Ownership of
-    origins is transferred at the CFG point.
-  \item
-    \texttt{path\_accessed\_at\_base:\ (Path,\ Point)} - Any memory
-    access to the path (read or write).
+    \texttt{cfg\_edge:\ (Point,\ Point)} represent the edges in the
+    control flow graph of the program.
   \end{itemize}
 \item
-  Facts about relationships (subset relation) of origins.
+  Variable Usage and Effects:
 
   \begin{itemize}
   \tightlist
   \item
-    \texttt{known\_placeholder\_subset:\ (Origin,\ Origin)} -
-    Constraints on universal origins (those representing loans that
-    happened outside the function).
+    \texttt{var\_used\_at:\ (Variable,\ Point)} marks locations a
+    variable is used in any way except for being dropped (destructed).
   \item
-    \texttt{universal\_region:\ (Origin)} - List of universal origins.
-    (See the previous point.)
+    \texttt{var\_defined\_at:\ (Variable,\ Point)} marks the beginning
+    of a variable's scope or its reassignment. All facts related to
+    given variable are reset at this point.
   \item
-    \texttt{subset\_base:\ (Origin,\ Origin)} - Any relationship between
-    origins required by the subtyping rules.
+    \texttt{var\_dropped\_at:\ (Variable,\ Point)} indicates a point
+    where a variable is dropped (its destructor is called).
   \item
-    \texttt{placeholder:\ (Origin,\ Loan)} - Associates an origin with a
-    loan.
+    \texttt{use\_of\_var\_derefs\_origin:\ (Variable,\ Origin)} means
+    that a variable type contains given origin.
+  \item
+    \texttt{drop\_of\_var\_derefs\_origin:\ (Variable,\ Origin)}
+    reflects that the origin is used in the drop implementation.
   \end{itemize}
 \item
-  Facts about loans.
+  Path Usage and Effects: Paths correspond to indirect or partial access
+  to a variable, such as field access or casting.
 
   \begin{itemize}
   \tightlist
   \item
-    \texttt{loan\_issued\_at:\ (Loan,\ Point)} - Result of borrow
-    expression.
+    \texttt{path\_is\_var:\ (Path,\ Variable)} lists trivial paths that
+    directly correspond to a variable.
   \item
-    \texttt{loan\_killed\_at:\ (Loan,\ Point)} - Loan is no longer live
-    after this point.
+    \texttt{child\_path:\ (Path,\ Path)} describes hierarchical
+    relationships between paths, where one path is a subset or component
+    of another.
   \item
-    \texttt{loan\_invalidated\_at:\ (Loan,\ Point)} - If the loan is
-    live at this point, it is an error.
+    \texttt{path\_assigned\_at\_base:\ (Path,\ Point)} highlights where
+    a specific path is assigned in the CFG.
+  \item
+    \texttt{path\_moved\_at\_base:\ (Path,\ Point)} marks the transfer
+    of ownership of origins at a specific CFG point.
+  \item
+    \texttt{path\_accessed\_at\_base:\ (Path,\ Point)} indicates any
+    memory access (read or write) to a path.
+  \end{itemize}
+\item
+  Origin Relationships:
+
+  \begin{itemize}
+  \tightlist
+  \item
+    \texttt{known\_placeholder\_subset:\ (Origin,\ Origin)} constrains
+    universal origins, representing loans from outside the function.
+  \item
+    \texttt{universal\_region:\ (Origin)} lists universal origins.
+  \item
+    \texttt{subset\_base:\ (Origin,\ Origin)} describes origin subset
+    (outlives) relationships.
+  \item
+    \texttt{placeholder:\ (Origin,\ Loan)} associates a universal origin
+    with a loan that happened outside the function.
+  \end{itemize}
+\item
+  Loan Facts:
+
+  \begin{itemize}
+  \tightlist
+  \item
+    \texttt{loan\_issued\_at:\ (Origin,\ Loan,\ Point)} marks execution
+    of a borrow expression.
+  \item
+    \texttt{loan\_killed\_at:\ (Loan,\ Point)} marks the end of a loan's
+    validity.
+  \item
+    \texttt{loan\_invalidated\_at:\ (Point,\ Loan)} marks points where
+    an active loan leads to an error.
   \end{itemize}
 \end{itemize}
 
 \chapter{Comparison of Internal
-Representations}\label{comparison-of-internal-representations}
+Representations}\label{sec:comparison-of-internal-representations}
 
-The execution of a borrow checker with an external analysis engine
-consists of two steps. First, we need to collect the relevant
-information about the program. We will call that information
-\emph{facts}. Second, we need to send those facts to the external engine
-and process them. Before we can discuss the \emph{collection} of facts
-itself, we need to understand how programs are represented inside the
-compiler. We will use the term \emph{internal representation} (IR) to
-refer to the representation of the program inside the compiler. We will
-compare the IRs used by rustc and gccrs to highlight the differences
-between the two compilers. This will help us understand the challenges
-of adapting the borrow checker design from rustc to gccrs. First, we
-will describe the IRs used by rustc and then compare them with those
-used in gccrs.
+Executing a borrow checker with an external analysis engine involves two
+key steps. The first is collecting relevant program information,
+referred to as \emph{facts}. The second step is evaluation of these
+facts using the external engine. Before we can discuss the
+\emph{collection} of facts, we need a clear understanding of how
+programs are represented inside the compiler. We will use the term
+\emph{internal representation} (IR) to refer to the representation of
+the program inside the compiler. We will compare the IRs used by rustc
+and gccrs to highlight the differences between the two compilers. This
+will help us understand the challenges of adapting the borrow checker
+design from rustc to gccrs. First, we will describe the IRs used by
+rustc and then compare them with those used in gccrs.
 
-\section{GCC and LLVM}\label{gcc-and-llvm}
+\section{GCC and LLVM}\label{sec:gcc-and-llvm}
 
 To understand the differences between each of the compilers, we must
 first explore the differences between the compiler platforms on which
 they are built (GCC and LLVM). We will only focus on the middle-end of
-each platform, since the back-end does not influence the front-end
-directly.
+each platform, since the back-end does not directly influence the
+front-end development.
 
-The core of LLVM is a three-address code (3-AD)\footnote{Three-address
-  code represents the program as sequences of statements (we call such
-  sequence a \emph{basic block}), connected by control flow
-  instructions, forming a control flow graph (CFG).} representation,
-called the \emph{LLVM intermediate representation} (LLVM IR)
-\citeproc{ref-llvm}{{[}12{]}}, llvm-ir. This IR is the interface between
-front-ends and the compiler platform (the middle-end and the back-end).
-Each front-end is responsible for transforming its custom AST
-IR\footnote{The abstract syntax tree (AST) is a data structure that is
-  used to represent the structure of the program. It is the direct
-  product of program parsing. For example, an expression
-  \texttt{1\ +\ (2\ -\ 7)} would be represented as a node
-  \texttt{subtraction}, with the left child being the number one and the
-  right child being the AST for the subexpression \texttt{(2\ -\ 7)}.}
-into the LLVM IR. The LLVM IR is stable and strictly separated from the
-front-end; therefore, it cannot be easily extended to include
-language-specific constructs.
+LLVM is built around a three-address code (3-AD)\footnote{Three-address
+  code represents a program as sequences of statements (known as
+  \emph{basic blocks}), connected by control flow instructions to form a
+  control flow graph (CFG).} representation known as the \emph{LLVM
+intermediate representation} (LLVM IR)\citeproc{ref-llvm}{{[}11{]}}.
+This IR serves as an interface between the front-ends and the LLVM
+platform. Each front-end is responsible for transforming its custom AST
+IR\footnote{The abstract syntax tree (AST) is a structure representing
+  the program's syntax. It is the direct result of parsing. For
+  instance, an expression \texttt{1\ +\ (2\ -\ 7)} would be represented
+  as a \texttt{subtraction} node, with children representing \texttt{1}
+  and the subexpression \texttt{(2\ -\ 7)}.} into the LLVM IR. The LLVM
+IR is stable and strictly separated from the front-end; therefore, it
+cannot be easily extended to include language-specific constructs.
 
 \begin{figure}
 \centering
@@ -791,29 +789,29 @@ language-specific constructs.
 \caption{LLVM IR CFG Example (generated by Compiler Explorer)}
 \end{figure}
 
-GCC, on the other hand, interfaces with the front-ends using a
-tree-based representation called GENERIC\citeproc{ref-gccint}{{[}13, p.
-175{]}}. GENERIC was created as a generalized form of AST shared by most
-front-ends. GCC provides a set of common tree nodes to describe all the
-standard language constructs in the GENERIC IR. Front-ends may define
-language-specific constructs and provide hooks for their
-handling.\citeproc{ref-gccint}{{[}13, p. 212{]}} This representation is
-then transformed into the GIMPLE representation, which is
+GCC, in contrast, uses a tree-based representation called
+GENERIC\citeproc{ref-gccint}{{[}12, p. 175{]}} for interfacing with
+front-ends. GENERIC was created as a generalized form of AST shared by
+most front-ends. GCC provides a set of common tree nodes to describe all
+the standard language constructs in the GENERIC IR. Front-ends may
+define language-specific constructs and provide hooks for their
+handling.\citeproc{ref-gccint}{{[}12, p. 212{]}} The GENERIC
+representation is subsequently transformed into GIMPLE, which is
 mostly\footnote{``GIMPLE that is not fully lowered is known as `High
   GIMPLE' and consists of the IL before the \texttt{pass\_lower\_cf}.
   High GIMPLE contains some container statements such as lexical scopes
   and nested expressions, while ``Low GIMPLE'' exposes all of the
   implicit jumps for control and exception expressions directly in the
-  IL and EH region trees.''\citeproc{ref-gccint}{{[}13, p. 225{]}}} a
-3-AD representation. It does so by breaking down expressions into a
-sequence of statements and introducing temporary variables. This
-transformation is done inside the compiler platform, not in the
-front-end. This approach makes the front-ends smaller and shifts more
-work into the shared part. The GIMPLE representation does not contain
-information specific to each front-end (programming language). However,
-it is possible to store language-specific information in GIMPLE by
-adding entirely new statements.\citeproc{ref-gccint}{{[}13, p. 262{]}}
-This is possible because GIMPLE is not a stable interface.
+  IL and EH region trees.''\citeproc{ref-gccint}{{[}12, p. 225{]}}} a
+3-AD representation. This transformation involves decomposing
+expressions into a series of statements and introducing temporary
+variables. This transformation is done inside the compiler platform, not
+in the front-end. This approach makes the front-ends smaller and shifts
+more work into the shared part. The GIMPLE representation does not
+contain information specific to each front-end (programming language).
+However, it is possible to store language-specific information in GIMPLE
+by adding entirely new statements.\citeproc{ref-gccint}{{[}12, p.
+262{]}} This is possible because GIMPLE is not a stable interface.
 
 The key takeaway from this section is that rustc has to transform the
 tree-based representation into a 3-AD representation by itself. That
@@ -822,7 +820,7 @@ not the case for gccrs. In GCC, the CFG is only available in the
 \emph{Low GIMPLE} representation, deep inside the middle-end where the
 IR is language independent.
 
-\section{Rustc Representation}\label{rustc-representation}
+\section{Rustc Representation}\label{sec:rustc-representation}
 
 In the previous section, we have seen that rustc is responsible for
 transforming the code from the raw text to the LLVM IR. Given the high
@@ -844,15 +842,15 @@ representations}
 AST is a tree-based representation of the program, closely following
 each source code token. At this stage, rustc performs macro-expansion
 and a partial name resolution (macros and imports)
-\citeproc{ref-devguide}{{[}14{]}} \footnote{\url{https://rustc-dev-guide.rust-lang.org/macro-expansion.html}}
+\citeproc{ref-devguide}{{[}13{]}} \footnote{\url{https://rustc-dev-guide.rust-lang.org/macro-expansion.html}}
 \footnote{\url{https://rustc-dev-uide.rust-lang.org/name-resolution.html}}.
 As the AST is lowered to HIR, some complex language constructs are
 desugared to simpler constructs. For example, various types of loops are
 transformed into a single infinite loop construct (Rust \texttt{loop}
 keyword), and many structures that can perform pattern matching
 (\texttt{if\ let}, \texttt{while\ let}, \texttt{?} operator) are
-transformed into the `match`` construct\citeproc{ref-reference}{{[}7{]}}
-\footnote{\href{https://doc.rust-lang.\%20org/reference/expressions/if-expr.html\#if-let-expressions}{https://doc.rust-lang.org/reference/expressions/if-expr.html\#if-let-expressions}}.
+transformed into the `match``
+construct\citeproc{ref-reference}{{[}14{]}} \footnote{\url{https://doc.rust-lang.org/reference/expressions/if-expr.html\#if-let-expressions}}.
 
 \begin{quote}
 \begin{Shaded}
@@ -865,51 +863,50 @@ transformed into the `match`` construct\citeproc{ref-reference}{{[}7{]}}
 \end{Highlighting}
 \end{Shaded}
 
-\textbf{Example:} This very simple code will be used as an example
-throughout this section.
+\textbf{Example:} This simple code snippet will serve as our example
+through this section.
 \end{quote}
 
 \begin{quote}
-\begin{verbatim}
-Fn {
-  generics: Generics { ... },
-  sig: FnSig {
-    header: FnHeader { ... },
-      decl: FnDecl {
-        inputs: [
-          Param {
-            ty: Ty {
-              Path { segments: [ PathSegment { ident: i32#0 } ] }
-            }
-            pat: Pat { Ident(x#0) }
-          },
-        ],
-        output: Ty {
-            Path { segments: [ PathSegment { ident: Foo#0 } ]
-        }
-      },
-  },
-  ... 
-}
-\end{verbatim}
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Fn \{}
+\NormalTok{  generics: Generics \{ ... \},}
+\NormalTok{  sig: FnSig \{}
+\NormalTok{    header: FnHeader \{ ... \},}
+\NormalTok{      decl: FnDecl \{}
+\NormalTok{        inputs: [}
+\NormalTok{          Param \{}
+\NormalTok{            ty: Ty \{}
+\NormalTok{              Path \{ segments: [ PathSegment \{ ident: i32\#0 \} ] \}}
+\NormalTok{            \}}
+\NormalTok{            pat: Pat \{ Ident(x\#0) \}}
+\NormalTok{          \},}
+\NormalTok{        ],}
+\NormalTok{        output: Ty \{}
+\NormalTok{            Path \{ segments: [ PathSegment \{ ident: Foo\#0 \} ]}
+\NormalTok{        \}}
+\NormalTok{      \},}
+\NormalTok{  \},}
+\NormalTok{  ... }
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
 
-\hfill\break
 \textbf{Example:} This is a textual representation of a small and
 simplified part of the abstract syntax tree (AST) of the example
 program. The full version can be found in the
 \hyperref[abstract-syntax-tree-ast]{appendix}.
 \end{quote}
 
-HIR is the primary representation used for most rustc
-operations\citeproc{ref-devguide}{{[}14{]}}, HIR. It combines a
-simplified version of the AST with additional tables and maps for quick
-access to additional information. Those tables contain, for example,
-information about the types of expressions and statements. These tables
-are used for analysis passes, e.g., the full (late) name resolution and
-type checking. The type-checking process includes checking the type
-correctness of the program, type inference, and resolution of
-type-dependent implicit language
-constructs.\citeproc{ref-devguide}{{[}14{]}} \footnote{\url{https://rustc-dev-guide.rust-lang.org/type-checking.html}}
+The HIR is rustc primary representation, and it is used for most
+operations\citeproc{ref-devguide}{{[}13{]}}, HIR It combines a
+simplified AST with additional tables for quick access to additional
+information, such as expression and statement types. These tables are
+used for analysis passes, including full name resolution and type
+checking. Type checking includes verification type correctness,
+inference, and resolving of implicit type-dependent
+constructs\citeproc{ref-devguide}{{[}13{]}} \footnote{\url{https://rustc-dev-guide.rust-lang.org/type-checking.html}}.
 
 \begin{quote}
 \begin{Shaded}
@@ -1005,10 +1002,10 @@ place.
 \end{Shaded}
 
 \textbf{Example:} MIR dump For further details, see the chapter ``Source
-Code Representation'' in \citeproc{ref-devguide}{{[}14{]}}.
+Code Representation'' in \citeproc{ref-devguide}{{[}13{]}}.
 \end{quote}
 
-\section{Rust GCC Resentation}\label{rust-gcc-resentation}
+\section{Rust GCC Representation}\label{sec:rust-gcc-representation}
 
 This section discusses intermediate representations in gccrs. Since
 gccrs is a second implementation of the Rust compiler, it is heavily
@@ -1048,40 +1045,40 @@ the inner types are modified during each type substitution, simplifying
 intermediate handling, like type inference.
 
 \chapter{Rust GCC Borrow Checker
-Design}\label{rust-gcc-borrow-checker-design}
+Design}\label{sec:rust-gcc-borrow-checker-design}
 
-The Rust GCC borrow checker is designed to be as similar to the rustc
-borrow checker as possible within the constraints of the Rust GCC. This
-allows us to leverage existing knowledge about borrow checking in Rust.
-The analysis works in two phases. First, it collects relevant
-information (called facts) about the program, which is stored as tuples
-of numbers. Each number represents a CFG node, variable, path/place, or
-loan (a borrow expression). Then, the borrow checker passes the facts to
-the analysis engine, which computes the results of the analysis. The
-compiler receives back the facts involved in memory safety violations
-and translates them into error messages. The main decision of the Rust
-GCC borrow checker is to reuse the analysis engine from rustc. To
-connect the Polonius engine written in Rust to the gccrs compiler
-written in C++, we use the C ABI and a thin Rust wrapper.
+The Rust GCC borrow checker is designed to closely resemble the rustc
+borrow checker, within the constraints of the Rust GCC. This approach
+allows us to leverage existing knowledge of borrow checking in Rust. The
+analysis operates in two phases. First, it gathers relevant information,
+called \emph{facts}, about the program, stored as tuples of numbers.
+Each number represents a CFG node, variable, path/place, or loan (a
+borrow expression). Then, the borrow checker submits these facts to the
+analysis engine, which computes the analysis results. The compiler
+receives the facts related to memory safety violations and translates
+them into error messages. A significant aspect of the Rust GCC borrow
+checker is its reuse of the analysis engine from rustc. To integrate the
+Polonius engine, developed in Rust, into the gccrs compiler, which is
+C++-based, we utilize the C ABI and a thin Rust wrapper.
 
-This chapter describes the process of designing the gccrs borrow
-checker, the decisions made during the process, and the final design.
-Special emphasis is placed on a new borrow checker intermediate
-representation (BIR) and its usage in the analysis. The chapter also
-describes other modifications of the compiler necessary to support
-borrow checking. The final section briefly describes the design of error
-reporting.
+This chapter details the design process of the gccrs borrow checker, the
+decisions made during this process, and the final design. It places
+special emphasis on the newly developed borrow checker intermediate
+representation (BIR) and its application in analysis. Additionally, the
+chapter covers other compiler modifications necessary to support borrow
+checking and concludes with a brief overview of the error reporting
+design.
 
 \section{Analysis of the Fact Collection
 Problem}\label{sec:analysis-of-the-fact-collection-problem}
 
-This section described options for fact collection in gccrs that were
-considered and experimented with during the initial design phase. Due to
-the differences between internal representations of rustc and gccrs, it
-was impossible to copy the rustc approach exactly. The options
-considered were to use HIR directly, to implement MIR in gccrs, or to
-design a new IR for borrow checking with multiple options to place it
-inside the compilation pipeline.
+This section discusses the options for fact collection in gccrs explored
+during the initial design phase. Due to the differences between internal
+representations of rustc and gccrs, it was impossible to copy the rustc
+approach exactly. The considered alternatives included direct use of
+HIR, implementing MIR in gccrs, or creating a new IR specifically for
+borrow checking, with various placement possibilities within the
+compilation pipeline.
 
 The analysis has been control-flow sensitive since NLL's introduction in
 rustc (see sec.~\ref{sec:evolution}), requiring us to match the required
@@ -1106,7 +1103,7 @@ need to be preserved by the middle-end passes until the pass building
 the CFG (which includes 11 passes), after which facts could be
 collected. After that, the facts would need to be discarded to avoid
 complicating the tens of subsequent
-passes\footnote{See file \texttt{gcc/passes.def} in the GCC source code.}\citeproc{ref-gccint}{{[}13,
+passes\footnote{See file \texttt{gcc/passes.def} in the GCC source code.}\citeproc{ref-gccint}{{[}12,
 p. 141{]}}, and RTL generation. This approach was discussed with senior
 GCC developers and quickly rejected as it would require a large amount
 of work and leak front-end-specific information into the middle-end,
@@ -1157,7 +1154,7 @@ no additions or modifications are needed). It was agreed that such
 transformations are useful and should be implemented regardless of the
 path taken by the borrow checker. Those transformations include mainly
 loops and pattern-matching structures. These transformations are even
-documented in the rust reference\citeproc{ref-reference}{{[}7{]}}.
+documented in the rust reference\citeproc{ref-reference}{{[}14{]}}.
 
 \begin{quote}
 At the time of writing, desugaring of the for loop was implemented by
@@ -1171,20 +1168,19 @@ already be able to handle.
 To ensure that all possible approaches were considered, we discussed the
 possibility of implementing MIR in gccrs. This approach has some
 advantages and many problems. Should the MIR be implemented in a
-completely compatible way, it would be possible to use tools like
-\href{https://github.com/rust-lang/miri}{MIRI} with gccrs. The borrow
-checking would be very similar to rustc's borrow checking, and parts of
-rustc's code might even be reused. Gccrs would also be more ready for
-Rust-specific optimizations within the front-end. The final advantage is
-that the current test suite would cover the process of lowering the HIR
-to MIR, as all transformations would affect the code generation. The
-main problem with this approach is that it would require a large portion
-of gccrs to be reimplemented, delaying the project by a considerable
-amount of time. Should such an approach be taken, any effort on borrow
-checking would be delayed until the MIR is implemented. The
-maintainers\citeproc{ref-zulip}{{[}15{]}} decided that such an approach
-is not feasible and that gccrs will not use MIR in any foreseeable
-future.
+completely compatible way, it would be possible to use tools like MIRI
+with gccrs. The borrow checking would be very similar to rustc borrow
+checking, and parts of rustc code might even be reused. Gccrs would also
+be more ready for Rust-specific optimizations within the front-end. The
+final advantage is that the current test suite would cover the process
+of lowering the HIR to MIR, as all transformations would affect the code
+generation. The main problem with this approach is that it would require
+a large portion of gccrs to be reimplemented, delaying the project by a
+considerable amount of time. Should such an approach be taken, any
+effort on borrow checking would be delayed until the MIR is implemented.
+The maintainers\citeproc{ref-zulip}{{[}15{]}} decided that such an
+approach is not feasible and that gccrs will not use MIR in any
+foreseeable future.
 
 After Arthur Cohen suggested keeping things simpler, I decided to
 experiment with a different, minimalistic approach: building a radically
@@ -1196,11 +1192,11 @@ actual data transformations. The main disadvantage of this approach is
 that it creates a dead branch of the compilation pipeline that is not
 used for code generation, and therefore it is not covered by the
 existing test suite. To overcome this difficulty, the BIR and its
-textual representation (dump) are designed to be as similar to rustc's
-MIR as possible. This feature allows us to check the generated BIR
-against the MIR generated by rustc, at least for simple programs. The
-use of BIR is the final approach used in this work. Details of the BIR
-design are described in the next section.
+textual representation (dump) are designed to be as similar to rustc MIR
+as possible. This feature allows us to check the generated BIR against
+the MIR generated by rustc, at least for simple programs. The use of BIR
+is the final approach used in this work. Details of the BIR design are
+described in the next section.
 
 \begin{figure}
 \centering
@@ -1208,56 +1204,57 @@ design are described in the next section.
 \caption{Placement of the borrow checker IR in the compilation pipeline}
 \end{figure}
 
-\section{The Borrow Checking Process}\label{the-borrow-checking-process}
+\section{The Borrow Checking
+Process}\label{sec:the-borrow-checking-process}
 
 Before the borrow checking itself can be performed, specific information
 about types needs to be collected when the HIR is type-checked and TyTy
-types are created and processed. The TyTy needs to resolve and store
-information about lifetimes and their constraints. At this point,
-lifetimes are resolved from string names, and their bounding clauses are
-found. There are different kinds of lifetimes in the Rust language.
-Inside types, the lifetimes are bound to the lifetime parameters of
-generic types. In function pointers, lifetimes can be universally
-quantified (meaning that the function must be memory-safe for every
-possible lifetime). In function definitions, lifetimes can be elided
-when all references have the same lifetime. In function bodies,
-lifetimes can be bound to the lifetime parameters of the function, or
-they can be omitted, in which case they are inferred \footnote{At least
-  Rust semantics thinks about it that way. In reality, the compiler only
+types are created. The TyTy needs to resolve and store information about
+lifetimes and their corresponding constraints. At this point, lifetimes
+are resolved from string names, and their bounding clauses are found.
+There are different kinds of lifetimes in the Rust language. Inside
+types, the lifetimes are bound to the lifetime parameters of generic
+types. In function pointers, lifetimes can be universally quantified
+(meaning that the function must be memory-safe for every possible
+lifetime). In function definitions, lifetimes may be omitted (elided) if
+all references share the same lifetime. In function bodies, lifetimes
+can be bound to the lifetime parameters of the function, or they can be
+omitted, in which case they are inferred \footnote{At least Rust
+  semantics thinks about it that way. In reality, the compiler only
   checks that there exists some lifetime that could be used in that
   position by collecting constraints that would apply to such a
   lifetime.}. The type-checked HIR is then transformed into the borrow
 checker IR (BIR). The BIR is then processed to extract facts for
 Polonius. At this phase, some errors that are easy to detect can be
-emitted. The collected facts are then passed to Polonius, which computes
-the results of the analysis. The results are then passed back to the
-compiler, which translates them into error messages.
+emitted. Subsequently, the collected facts are passed to Polonius, which
+then computes the results of the analysis. The results are then passed
+back to the compiler, which translates them into error messages.
 
 \section{Representation of Lifetimes in
-TyTy}\label{representation-of-lifetimes-in-tyty}
+TyTy}\label{sec:representation-of-lifetimes-in-tyty}
 
 \begin{quote}
-The term \emph{lifetime} is used in this work to refer to the syntactic
-object in HIR and AST. In the source code, it corresponds to either
-explicit universal\footnote{There are two kinds of lifetimes in Rust
-  semantics: universal and existential. Universal lifetimes correspond
-  to code that occurs outside the function. It is called universal
-  because the concerned borrow checking rules use the universal
-  quantifier. That means that the function has to be valid \emph{for
-  all} possible outside code that satisfies the specified (or implied)
-  constraints. Existential lifetimes correspond to the code that happens
-  inside the function. The existential quantifier is used in the rules
-  regarding existential lifetimes. That means that the code has to be
-  valid \emph{for some} set of \emph{loans} (or CFG points).} lifetime
+In this work, the term lifetime refers to the syntactic object in HIR
+and AST. In the source code, it corresponds to either explicit
+universal\footnote{There are two kinds of lifetimes in Rust semantics:
+  universal and existential. Universal lifetimes correspond to code that
+  occurs outside the function. It is called universal because the
+  concerned borrow checking rules use the universal quantifier. That
+  means that the function has to be valid \emph{for all} possible
+  outside code that satisfies the specified (or implied) constraints.
+  Existential lifetimes correspond to the code that happens inside the
+  function. The existential quantifier is used in the rules regarding
+  existential lifetimes. That means that the code has to be valid
+  \emph{for some} set of \emph{loans} (or CFG points).} lifetime
 annotation (\texttt{\textquotesingle{}a}), elided universal lifetime
-annotation\href{https://doc.rust-lang.org/reference/lifetime-elision.html}{\citeproc{ref-reference}{{[}7{]}}},
+annotation\href{https://doc.rust-lang.org/reference/lifetime-elision.html}{\citeproc{ref-reference}{{[}14{]}}},
 and local/existential lifetimes, which are always inferred. In contrast,
 \emph{region}/\emph{origin} is used to refer to the semantic object. The
 object is, in fact, an inference variable, and its value is computed by
 the borrow checker. The term \emph{region} is used by NLL to refer to a
 set of CFG points. Polonius introduced the term \emph{origin} to refer
-to a set of \emph{loans}. In this text and in the implementation, we use
-the two terms interchangeably.
+to a set of \emph{loans}. In both this text and the implementation, the
+terms are used interchangeably.
 \end{quote}
 
 In order to analyze more complex lifetimes than just simple references,
@@ -1265,11 +1262,11 @@ it was necessary to add a representation of lifetime parameters to the
 type system and unify it with the representation of lifetimes in the
 rest of the compiler. The first step is to resolve the lifetimes and
 bind them to their binding clauses. Gccrs recognizes four kinds of
-regions. In a function body, explicit lifetimes annotations result in
-``named'' lifetimes, and implicit lifetimes annotations result in
-``anonymous'' lifetimes. Within generic data types, lifetimes resolved
-to lifetime parameters are called ``early-bound.'' For function pointers
-and traits, lifetimes can be universally quantified using the
+regions. In a function body, explicit lifetime annotations result in
+\emph{named} lifetimes, while implicit annotations lead to
+\emph{anonymous} lifetimes. Within generic data types, lifetimes
+resolved to lifetime parameters are called ``early-bound.'' For function
+pointers and traits, lifetimes can be universally quantified using the
 \texttt{for} clause\footnote{\texttt{for\textless{}\textquotesingle{}a\textgreater{}\ fn(\&\textquotesingle{}a\ i32)\ -\textgreater{}\ \&\textquotesingle{}a\ i32}}.
 These lifetimes are not resolved when the definition is analyzed, but
 only when this type is used. Hence, the name is ``late-bound''
@@ -1285,66 +1282,70 @@ distinct (but they are represented by an identical object at this
 stage). Early bound lifetimes are represented by the relative position
 of the lifetime parameter to which they are bound. In generic types, the
 lifetime arguments are stored together with the type arguments, which
-ensures their automatic propagation. One issue with this automatic
-propagation is that the bindings of early bound lifetimes are updated.
-This means that by a simple inspection of the body of the generic type,
-one would not be able to resolve the lifetimes. A trick solves this
-problem. Each TyTy type is identified by an ID. When generic arguments
-are substituted, a clone of the type with a fresh ID is created. What we
-would like to achieve is to have the same state as in rustc: the
-original body and an up-to-date list of generic arguments. This can be
-achieved by storing the ID of the original type in addition to the
-current ID. The original ID can be used to lookup the original type when
-needed.\footnote{This was once revealed to me in a dream.} The analysis
-can then traverse the original type, and when a type placeholder is
-encountered, the appropriate argument is looked up in the current type.
+ensures their automatic propagation. An issue arising from this
+automatic propagation is the updating of the bindings of early bound
+lifetimes. This means that by a simple inspection of the body of the
+generic type, one would not be able to resolve the lifetimes. A trick
+solves this problem. Each type in TyTy is identified by a unique ID.
+When generic arguments are substituted, a clone of the type with a fresh
+ID is created. What we would like to achieve is to have the same state
+as in rustc: the original body and an up-to-date list of generic
+arguments. This can be achieved by storing the ID of the original type
+in addition to the current ID. When necessary, the original ID can be
+used to look up the initial type.\footnote{This was once revealed to me
+  in a dream.} The analysis can then traverse the original type, and
+when a type placeholder is encountered, the appropriate argument is
+looked up in the current type.
 
-\section{Borrow Checker IR Design}\label{borrow-checker-ir-design}
+\section{Borrow Checker IR Design}\label{sec:borrow-checker-ir-design}
 
-The borrow checker IR (BIR) is a three-address code representation
-designed to be close to a subset of the rustc MIR. Like MIR, it
-represents the body of a single function (or a function-like item, for
-example, a closure), since borrow checking is performed on each function
-separately. It ignores particular operations and merges them into a few
-abstract operations that focus on data flow.
+The Borrow Checker Intermediate Representation (BIR) is a three-address
+code representation, designed to closely resemble a subset of rustc
+Mid-level Intermediate Representation (MIR). Like MIR, it represents the
+body of a single function (or function-like item, such as a closure), as
+borrow checking is performed on each function separately. It abstracts
+specific operations into a few key operations that focus on data flow.
 
 \begin{quote}
 \begin{Shaded}
 \begin{Highlighting}[]
-\KeywordTok{fn}\NormalTok{ fib(\_1}\OperatorTok{:} \DataTypeTok{usize}\NormalTok{) }\OperatorTok{{-}\textgreater{}} \DataTypeTok{i32} \OperatorTok{\{}
+\KeywordTok{fn}\NormalTok{ fib(\_2}\OperatorTok{:} \DataTypeTok{u32}\NormalTok{) }\OperatorTok{{-}\textgreater{}} \DataTypeTok{u32} \OperatorTok{\{}
 \NormalTok{    bb0}\OperatorTok{:} \OperatorTok{\{}
-\NormalTok{        \_4 }\OperatorTok{=}\NormalTok{ Operator(\_1}\OperatorTok{,} \KeywordTok{const} \DataTypeTok{usize}\NormalTok{)}\OperatorTok{;}
-\NormalTok{        switchInt(\_4) }\OperatorTok{{-}\textgreater{}}\NormalTok{ [bb1}\OperatorTok{,}\NormalTok{ bb2]}\OperatorTok{;}
+    \DecValTok{0}\NormalTok{    StorageLive(\_3)}\OperatorTok{;}
+    \DecValTok{1}\NormalTok{    StorageLive(\_5)}\OperatorTok{;}
+    \DecValTok{2}\NormalTok{    \_5 }\OperatorTok{=}\NormalTok{ \_2}\OperatorTok{;}
+    \DecValTok{3}\NormalTok{    StorageLive(\_6)}\OperatorTok{;}
+    \DecValTok{4}\NormalTok{    \_6 }\OperatorTok{=}\NormalTok{ Operator(}\KeywordTok{move}\NormalTok{ \_5}\OperatorTok{,} \KeywordTok{const} \DataTypeTok{u32}\NormalTok{)}\OperatorTok{;}
+    \DecValTok{5}\NormalTok{    switchInt(}\KeywordTok{move}\NormalTok{ \_6) }\OperatorTok{{-}\textgreater{}}\NormalTok{ [bb1}\OperatorTok{,}\NormalTok{ bb2]}\OperatorTok{;}
     \OperatorTok{\}}
 
-    \CommentTok{// ... (rest of the code)}
+   \CommentTok{// ... (omitted for brevity) }
 
-\NormalTok{    bb6}\OperatorTok{:} \OperatorTok{\{}
-\NormalTok{        \_8 }\OperatorTok{=}\NormalTok{ Operator(\_1}\OperatorTok{,} \KeywordTok{const} \DataTypeTok{usize}\NormalTok{)}\OperatorTok{;}
-\NormalTok{        \_9 }\OperatorTok{=}\NormalTok{ Call(fib)(\_8}\OperatorTok{,}\NormalTok{ ) }\OperatorTok{{-}\textgreater{}}\NormalTok{ [bb7]}\OperatorTok{;}
+\NormalTok{    bb5}\OperatorTok{:} \OperatorTok{\{}
+    \DecValTok{0}\NormalTok{    StorageLive(\_14)}\OperatorTok{;}
+    \DecValTok{1}\NormalTok{    \_14 }\OperatorTok{=}\NormalTok{ \_2}\OperatorTok{;}
+    \DecValTok{2}\NormalTok{    StorageLive(\_15)}\OperatorTok{;}
+    \DecValTok{3}\NormalTok{    \_15 }\OperatorTok{=}\NormalTok{ Operator(}\KeywordTok{move}\NormalTok{ \_14}\OperatorTok{,} \KeywordTok{const} \DataTypeTok{u32}\NormalTok{)}\OperatorTok{;}
+    \DecValTok{4}\NormalTok{    StorageLive(\_16)}\OperatorTok{;}
+    \DecValTok{5}\NormalTok{    \_16 }\OperatorTok{=}\NormalTok{ Call(fib)(}\KeywordTok{move}\NormalTok{ \_15) }\OperatorTok{{-}\textgreater{}}\NormalTok{ [bb6]}\OperatorTok{;}
     \OperatorTok{\}}
 
-\NormalTok{    bb7}\OperatorTok{:} \OperatorTok{\{}
-\NormalTok{        \_10 }\OperatorTok{=}\NormalTok{ Operator(\_7}\OperatorTok{,}\NormalTok{ \_9)}\OperatorTok{;}
-\NormalTok{        \_2 }\OperatorTok{=}\NormalTok{ \_10}\OperatorTok{;}
-\NormalTok{        goto }\OperatorTok{{-}\textgreater{}}\NormalTok{ bb8}\OperatorTok{;}
-    \OperatorTok{\}}
+    \CommentTok{// ... (omitted for brevity)}
 
 \NormalTok{    bb8}\OperatorTok{:} \OperatorTok{\{}
-\NormalTok{        \_0 }\OperatorTok{=}\NormalTok{ \_2}\OperatorTok{;}
-        \ControlFlowTok{return}\OperatorTok{;}
+    \DecValTok{0}\NormalTok{    StorageDead(\_9)}\OperatorTok{;}
+    \CommentTok{// ... (omitted for brevity) }
+    \DecValTok{4}\NormalTok{    StorageDead(\_3)}\OperatorTok{;}
+    \DecValTok{5}    \ControlFlowTok{return}\OperatorTok{;}
     \OperatorTok{\}}
 \OperatorTok{\}}
 \end{Highlighting}
 \end{Shaded}
 
-\textbf{Example:} A shortened example of a BIR dump of a simple Rust
-program. The program computes the nth Fibonacci number. The source code,
-full dump, and legend can be found in
-\hyperref[appendix-c-bir-dump-example]{\emph{appendix C}}. This example
-comes from the ``BIR Design Notes'' document, which is part of the
-source tree and provides an introduction to developers getting familiar
-with the basic aspects of the borrow checker implementation.
+\textbf{Example:} The following example shows a shortened BIR dump of a
+simple Rust program computing the nth Fibonacci number. The complete
+source code and full dump are available in appendix
+\ref{sec:comparison-of-bir-and-mir}.
 \end{quote}
 
 The BIR of a single function is composed of basic metadata about the
@@ -1457,29 +1458,26 @@ runtime information.
 \end{itemize}
 \end{quote}
 
-\section{BIR Building}\label{bir-building}
+\section{BIR Building}\label{sec:bir-building}
 
-The BIR is built by visiting the HIR tree of the function. There are
-specialized visitors for expressions and statements, patterns, and a
-top-level visitor that handles function headers (arguments, return,
-lifetimes, etc.). Whenever a new place is created in the compilation
-database, a list of fresh regions\footnote{In this text, we use the term
-  lifetime for the syntactic object in the code and region for the
-  semantic object in the analysis. It is called a region because it
-  represents a set of points in the control flow graph (CFG). At this
-  point, the set is not yet known. It is the main task of the borrow
-  checker analysis engine to compute the set of points for each region.}
-is created for it. At this point, we need to figure out the number of
-lifetimes mentioned in a type. For basic types, this is achieved by
-traversing the type and counting the number of lifetime parameters. For
-generic types, the inner structure is ignored, and only the lifetime and
-type parameters are considered. Note that the type parameters can be
-generic, creating a structure known as
-\href{https://rustc-dev-guide.rust-lang.org/what-does-early-late-bound-mean.html\#early-and-late-bound-parameter-definitions}{higher-kinded}
-lifetimes. This counting is performed (as a side product) during the
-variance analysis (explained below) to simplify the type traversing
-code. All types are independently queried for each node from the HIR
-(they are not derived inside the BIR).
+BIR construction involves visiting the High-Level Intermediate
+Representation (HIR) tree of the function. There are specialized
+visitors for expressions, statements, and patterns, as well as a
+top-level visitor for handling function headers. Whenever a new place is
+created in the compilation database, a corresponding list of fresh
+regions\footnote{In this text, we use the term lifetime for the
+  syntactic object in the code and region for the semantic object in the
+  analysis. It is called a region because it represents a set of points
+  in the control flow graph (CFG). At this point, the set is not yet
+  known. It is the main task of the borrow checker analysis engine to
+  compute the set of points for each region.} is generated. Counting the
+number of lifetimes to be generated involves traversing the type
+structure. For generic types, the inner structure is ignored and only
+the lifetime and type parameters are considered. Note that the type
+parameters can be also generic, creating a structure known as
+\href{https://rustc-dev-guide.rust-lang.org/what-does-early-late-bound-mean.html\#early-and-late-bound-parameter-definitions}{higher-kinded}.
+All types are independently queried for each node from the HIR, instead
+of being derived within the BIR.
 
 \begin{quote}
 Example: For a BIR code that reads a field from a variable, the type is
@@ -1505,19 +1503,15 @@ therefore, easier for manual comparison.
 \end{quote}
 
 \section{BIR Fact Collection and
-Checking}\label{bir-fact-collection-and-checking}
+Checking}\label{sec:bir-fact-collection-and-checking}
 
-The BIR fact collection extracts the Polonius facts from the BIR and
-performs additional checks. Polonius is responsible for checking
-lifetime (region) constraints, moves, and conflicts between borrows. For
-lifetimes, it checks that the constraints are satisfied and that all
-required constraints are present in the program. For moves, it checks
-that each place is moved at most once. For borrows, it checks that any
-two conflicting borrows (e.g., two mutable borrows of the same place)
-are not alive at the same time. Sets of conflicting borrows have to be
-supplied to Polonius manually. The borrow checker itself is responsible
-for violations that are not control-flow sensitive, like modification of
-an immutably borrowed place or moving from behind a reference.
+The BIR fact collection process extracts Polonius facts from the BIR and
+conducts additional checks. Polonius is responsible for verifying
+lifetime (region) constraints, ensuring each place is moved at most
+once, and checking that illegal accesses are not made to borrow memory
+locations. The collection process involves two phases: gathering static
+facts from the place database and universal region constraints, and
+traversing the BIR along the CFG to collect dynamic facts.
 
 The fact collection is performed in two phases. First, static facts are
 collected from the place database. These include universal region
@@ -1541,36 +1535,33 @@ within the type. (See Variance Analysis below.)
 \end{Shaded}
 
 Formal definition of paths from the Polonius
-book\citeproc{ref-polonius}{{[}11{]}}.
+book\citeproc{ref-polonius}{{[}10{]}}.
 \end{quote}
 
 In the second phase, the BIR is traversed along the CFG, and dynamic
 facts are collected. For each statement, two CFG nodes are added. Two
-nodes are needed to model the parts of semantics where the statement
-takes effect immediately or after the statement is executed. For each
+nodes are necessary to model the semantic aspects where the statement's
+effect is immediate or follows the execution of the statement. For each
 statement and (if present) its expression, Polonius facts are collected.
 These include generic facts related to read and write operations, as
 well as facts specific to borrows and function calls. For the function,
 we need to instantiate fresh regions for the function's lifetime
 parameters, which need to be correctly bound together.
 
-\subsection{Subtyping and Variance}\label{subtyping-and-variance}
+\subsection{Subtyping and Variance}\label{sec:subtyping-and-variance}
 
 In the basic interpretation of Rust language semantics (one used by
 programmers to reason about their code, not the one used by the
-compiler), lifetimes are part of the type and are always present. If a
-lifetime is not mentioned in the program explicitly, it is inferred the
-same way as a part of type would be (e.g.,
-\texttt{let\ a\ =\ (\_,\ i32)\ =\ (true,\ 5);} completes the type to
-\texttt{(bool,\ i32)}) Note that it is actually impossible to write
-those lifetimes. In the Rust program, all explicit lifetime annotations
-correspond to any borrow that occurred \textbf{outside} the function,
-and therefore, it is alive for the whole body of the function. Explicit
-lifetime annotations corresponding to regions that span only a part of
-the function body would be pointless. Borrows inside a function can be
-analyzed precisely by the borrow checker. Explicit annotations are only
-used to represent constraints following from the code that the borrow
-checker cannot see.
+compiler), lifetimes are part of the type and are always present.
+Lifetimes not explicitly mentioned are inferred in the same way as type
+parts (e.g., \texttt{let\ a\ =\ (\_,\ i32)\ =\ (true,\ 5);} infers the
+type to \texttt{(bool,\ i32)}). In Rust, explicit lifetime annotations
+in a function correspond to borrows that occurred \emph{outside} the
+function, implying that these lifetimes span the entire function body.
+Annotations for lifetimes that cover only part of the function body
+would be redundant, as borrows within a function are precisely analyzed
+by the borrow checker. Explicit annotations are used only to represent
+constraints from code outside the function's scope.
 
 \begin{quote}
 \begin{Shaded}
@@ -1584,28 +1575,27 @@ checker cannot see.
 \end{Highlighting}
 \end{Shaded}
 
-\textbf{Example:} We need to infer the type of x, so that it is a
+\textbf{Example:} The type of \texttt{x} must be inferred to be a
 subtype of both \texttt{\&\textquotesingle{}a\ T} and
-\texttt{\&\textquotesingle{}b\ T}. We need to make sure that if we
-further use x, that is safe with regard to all loans it can contain
-(here \texttt{a} or \texttt{b}).
+\texttt{\&\textquotesingle{}b\ T}, ensuring safe use with all potential
+loans (here \texttt{a} or \texttt{b}).
 \end{quote}
 
 In Rust, unlike object-oriented languages like Java or C++, the only
-subtyping relation other than identity is caused by
-lifetimes\footnote{During the type inference computation, there can also
-  be a subtyping relation with a general kind of types (like ), which is
+subtyping relationship, apart from identity, arises from
+lifetimes\footnote{During type inference computation, there can also be
+  subtyping relations with general kinds of types (like ), which is
   mostly used for literals without a type annotation, where we know it
-  is ``some kind'' of integer, but we do not yet know which one}. Two
-regions (corresponding to lifetimes) can be unrelated, a subset of each
-other (in terms of a set of CFG nodes) (denoted
-\texttt{\textquotesingle{}a:\ \textquotesingle{}b}), or equal (typically
-a result of \texttt{\textquotesingle{}a:\ \textquotesingle{}b} and
+  is ``some kind'' of integer, but we do not yet know which one.}. Two
+regions (representing lifetimes) can either be unrelated, subsets of
+each other in terms of loans or CFG points
+(\texttt{\textquotesingle{}a:\ \textquotesingle{}b}), or equal
+(resulting from \texttt{\textquotesingle{}a:\ \textquotesingle{}b} and
 \texttt{\textquotesingle{}b:\ \textquotesingle{}a}). The dependency of
 subtyping on the inner parameter is called variance.
 
 \begin{quote}
-\textbf{Definition} \citeproc{ref-reference}{{[}7{]}}
+\textbf{Definition} \citeproc{ref-reference}{{[}14{]}}
 
 \texttt{F\textless{}T\textgreater{}} is covariant over \texttt{T} if
 \texttt{T} being a subtype of \texttt{U} implies that
@@ -1620,42 +1610,42 @@ subtyping on the inner parameter is called variance.
 otherwise (no subtyping relation can be derived)
 \end{quote}
 
-Let us see what that means on an example specific to lifetimes. For a
-simple reference type \texttt{\&\textquotesingle{}a\ T}, the lifetime
-parameter \texttt{\textquotesingle{}a} is covariant. This means that if
-we have a reference \texttt{\&\textquotesingle{}a\ T} we can coerce it
-to \texttt{\&\textquotesingle{}b\ T}, then \texttt{\textquotesingle{}a}
-is a subtype of \texttt{\textquotesingle{}b}. In other words, if we are
-storing a reference to some memory, it is sound to assign it to a
-reference that lives for a shorter period of time. That is, if it is
-safe to dereference a reference within any point of period
-\texttt{\textquotesingle{}a}, it is also safe to dereference it within
-any point of period \texttt{\textquotesingle{}b},
-(\texttt{\textquotesingle{}}b\texttt{is\ a\ subset\ of}'\texttt{a})
-\footnote{A subset of CFG nodes.}.
+Consider an example specific to lifetimes in Rust. With a simple
+reference type \texttt{\&\textquotesingle{}a\ T}, the lifetime parameter
+\texttt{\textquotesingle{}a} is covariant. This implies that a reference
+\texttt{\&\textquotesingle{}a\ T} can be safely coerced into
+\texttt{\&\textquotesingle{}b\ T} if \texttt{\textquotesingle{}a} is a
+subtype of \texttt{\textquotesingle{}b}. In practical terms, if it's
+safe to dereference a reference at any point during the period
+\texttt{\textquotesingle{}a}, it remains safe throughout the shorter
+period \texttt{\textquotesingle{}b}, given \texttt{\textquotesingle{}b}
+is a subset of \texttt{\textquotesingle{}a} \footnote{A subset of CFG
+  nodes.}.
 
 The situation is different when we pass a reference to a function as an
 argument. In that case, the lifetime parameter is contravariant. For
 function parameters, we need to ensure that the parameter lives as long
-as the function needs it to. If we have a function pointer of type
-\texttt{fn\ foo\textless{}\textquotesingle{}a\textgreater{}(x:\ \&\textquotesingle{}a\ T)},
-we can coerce it to
-\texttt{fn\ foo\textless{}\textquotesingle{}b\textgreater{}(x:\ \&\textquotesingle{}b\ T)},
-where \texttt{\textquotesingle{}b} lives longer than
-\texttt{\textquotesingle{}a}. This conversion is safe because it only
-restricts the possible values of the parameter \texttt{x}.
+as the function needs it to. For instance, a function pointer with the
+type
+\texttt{fn\ foo\textless{}\textquotesingle{}a\textgreater{}(x:\ \&\textquotesingle{}a\ T)}
+can be coerced into
+\texttt{fn\ foo\textless{}\textquotesingle{}b\textgreater{}(x:\ \&\textquotesingle{}b\ T)}
+if \texttt{\textquotesingle{}b:\ \textquotesingle{}a}. Such a
+transformation is safe as it narrows the range of acceptable argument
+values for the parameter \texttt{x}.
 
-Let us look at that visually. In the following code, we have region
-\texttt{\textquotesingle{}a}, where it is safe to reference the storage
-of \texttt{x}, and region \texttt{\textquotesingle{}b} where it is safe
-to reference the storage of \texttt{y}. If a function safely works with
-a reference of lifetime \texttt{\textquotesingle{}b}, it will also
-safely work with a reference of lifetime \texttt{\textquotesingle{}a}.
+To visualize this concept, consider the following code snippet, where
+\texttt{\textquotesingle{}a} denotes a region safe for referencing the
+storage of \texttt{x}, and \texttt{\textquotesingle{}b} denotes a
+similar region for \texttt{y}. A function that operates correctly with a
+reference of lifetime \texttt{\textquotesingle{}b} is also guaranteed to
+work correctly with a reference of lifetime
+\texttt{\textquotesingle{}a}, since \texttt{\textquotesingle{}a}
+contains \texttt{\textquotesingle{}b}.
 
 \begin{quote}
 \begin{Shaded}
 \begin{Highlighting}[]
-
  \KeywordTok{let}\NormalTok{ x }\OperatorTok{=} \DecValTok{5}\OperatorTok{;}        \CommentTok{// region \textquotesingle{}a}
  \OperatorTok{\{}                 \CommentTok{//}
      \KeywordTok{let}\NormalTok{ y }\OperatorTok{=} \DecValTok{7}\OperatorTok{;}    \CommentTok{//            // region \textquotesingle{}b        }
@@ -1674,57 +1664,52 @@ The return type requires the function to be covariant over
 \texttt{\textquotesingle{}a}, while the parameter requires it to be
 contravariant. This is called \emph{invariance}.
 
-For non-generic types, its variance immediately follows from the type
-definition. For generic types, the situation is more complex.
+For non-generic types, variance is directly derived from the type
+definition. However, variance in generic types is more complex and
+subject to different approaches.
 
-\subsection{Variance of Generic Types}\label{variance-of-generic-types}
+\subsection{Variance of Generic
+Types}\label{sec:variance-of-generic-types}
 
-There are multiple approaches to the variance of generic types. It can
-be either derived from the usage of the type or its
-definition\citeproc{ref-Altidor2011}{{[}16{]}}. For non-generic types,
-use-site variance is used.\footnote{For
-  \texttt{\&\textquotesingle{}a\ T}, if the reference is used as a
-  function parameter, it is contravariant; if it is used as a return
-  type, it is covariant.} For generic types, Rust uses definition-site
-variance. This means that the variance is computed solely from the
-definition of the type (effectively, usage constraint to the body of the
-type), not from its usage (inside functions). The situation becomes
-complicated when a generic type is used inside another generic type,
-possibly even in a recursive fashion. In that situation, the variance
-has to be computed using a fixed-point algorithm (further referred to as
-the ``variance analysis'').
+Generic type variance can be derived from either the type's usage or its
+definition\citeproc{ref-Altidor2011}{{[}16{]}}. Rustc employs
+definition-site variance for generic types, meaning variance is computed
+from the type's definition, rather than its usage in functions. The
+situation becomes complicated when a generic type is used within another
+type, possibly in a recursive manner. In such cases, variance requires
+computation via a fixed-point algorithm, referred to as ``variance
+analysis''.
 
-\subsubsection{Variance Analysis}\label{variance-analysis}
+\subsubsection{Variance Analysis}\label{sec:variance-analysis}
 
-Both rustc and gccrs variance analysis implementation is based on
-Section 4 of the paper \citeproc{ref-Altidor2011}{{[}16{]}}. The
-notation from the paper is followed in the documentation of both
-compilers, their documentation, and in this text. The paper primarily
-focuses on variance of complex types, like in the case of Java, but it
-introduces an effective formal calculus, which works nicely with
-higher-kinded lifetimes.
+Both rustc and gccrs implement variance analysis based on section 4 of
+the paper \citeproc{ref-Altidor2011}{{[}16{]}}. The notation from the
+paper is followed in the documentation of both compilers, as well as in
+this text. While the paper primarily focuses on the variance of complex
+types, like in the case of Java, it introduces an effective formal
+calculus, which is also applicable to higher-kinded lifetimes.
 
-The exact rules are best understood from the paper and from the code
-itself. Therefore, we will only provide a simple overview here. The
-analysis uses an iterative fixed-point computation, where variables form
-a semi-lattice with an additional binary operation. A single variable
-corresponds to a single lifetime or type parameter. Variables are
-initialized as bivariant.
+For a thorough understanding of the exact rules, the paper and the
+source code are the best resources. Here, we provide only a basic
+overview. The analysis employs an iterative fixed-point computation,
+where variables form a semi-lattice with an additional binary operation.
+Each variable corresponds to a single lifetime or type parameter and is
+initially set as bivariant.
 
-The visitor traverses each type with the current variance of the visited
-expression as input. Each member of a type is in a covariant position.
-Each member of a function parameter is in a contravariant position. The
-return type is in the covariant position. The position of the generic
-argument is determined by the variance of the generic parameter (a
-variable in this computation). The variance of the current node within
-the type is computed by the \texttt{transform} function, taking the
-variance of the parent node and the variance based on the position of
-the current node. When a lifetime or type parameter is encountered, then
-if the current variance expression is constant, the variable is updated
-to the new variance using the join operation with the current value. For
-an expression that contains at least one variable, the expression is
-added to the list of constraints. Here, the fixed-point computation
-requirement arises.
+The visitor algorithm traverses each type, taking the current variance
+of the visited expression as input. Every type member is in a covariant
+position. Conversely, each function parameter member is in a
+contravariant position, while the return type is in a covariant
+position. The position of a generic argument is determined by the
+variance of the generic parameter (represented as a variable in this
+computation). The variance of the current node within the type is
+computed by a \texttt{transform} function, which considers both the
+parent node's variance and the current node's positional variance. When
+a lifetime or type parameter is encountered, then, if the current
+variance expression is constant, the variable is updated to the new
+variance using the join operation with the current value. For
+expressions containing at least one variable, the expression is added to
+a list of constraints and the fixed-point computation is used.
 
 \begin{quote}
 \textbf{Example of Algorithm Execution}
@@ -1741,208 +1726,223 @@ requirement arises.
 \begin{itemize}
 \tightlist
 \item
-  Struct foo has three generic parameters, leading to 3 variables.
-  \texttt{f0=o}, \texttt{f1=o} and \texttt{f2=o}.
+  \texttt{Foo} has three generic parameters, resulting in 3 variables:
+  \texttt{f0=o}, \texttt{f1=o}, \texttt{f2=o}.
 \item
-  \texttt{x} is processed first, in the covariant position.
-\item
-  \texttt{\&\textquotesingle{}a\ T} is in covariant position; therefore,
-  the variables are updated to \texttt{f0=+} and \texttt{f2=+}.
-\item
-  \texttt{y} is processed second, in the covariant position.
-\item
-  \texttt{Bar\textless{}T\textgreater{}} is in covariant position.
+  \texttt{x} is first processed in the covariant position.
 
   \begin{itemize}
   \tightlist
   \item
-    \texttt{T} is inside a generic argument; therefore, its position is
-    computed as a term \texttt{transform(+,\ b0)}.
+    \texttt{\&\textquotesingle{}a\ T} being in the covariant position
+    updates the variables to \texttt{f0=+} and \texttt{f2=+}.
+  \end{itemize}
+\item
+  \texttt{y} is next, also in the covariant position.
+
+  \begin{itemize}
+  \tightlist
+  \item
+    \texttt{Bar\textless{}T\textgreater{}} being in the covariant
+    position.
 
     \begin{itemize}
     \tightlist
     \item
-      New constant \texttt{f2\ =\ join(f2,\ transform(+,\ b0))} is
+      \texttt{T} inside a generic argument leads to
+      \texttt{transform(+,\ b0)} for its position.
+    \item
+      A new constant \texttt{f2\ =\ join(f2,\ transform(+,\ b0))} is
       added.
     \end{itemize}
   \end{itemize}
 \item
-  All types are processed. Let us assume that \texttt{Bar} is an
-  external type with variances \texttt{{[}-{]}} Now a fixed-point
-  computation is performed.
-\item
-  Iteration 1:
+  After processing all types and assuming \texttt{Bar} is an external
+  type with variances \texttt{{[}-{]}}, a fixed-point computation
+  begins.
 
   \begin{itemize}
   \tightlist
   \item
-    Current values are \texttt{f0=+}, \texttt{f1=o} and \texttt{f2=+}
+    Iteration 1:
+
+    \begin{itemize}
+    \tightlist
+    \item
+      Starting values: \texttt{f0=+}, \texttt{f1=o}, \texttt{f2=+}.
+    \item
+      Processing constraint
+      \texttt{f2\ =\ join(f2,\ transform(+,\ b0))}.
+    \item
+      \texttt{transform(+,\ b0)} with \texttt{b0=-} gives \texttt{-}.
+    \item
+      \texttt{join(+,\ -)} results in \texttt{*}.
+    \item
+      Update of \texttt{f2} requires another iteration.
+    \end{itemize}
   \item
-    Processing constraint \texttt{f2\ =\ join(f2,\ transform(+,\ b0))}
-  \item
-    \texttt{transform(+,\ b0)} where \texttt{b0=-} yields \texttt{-}
-  \item
-    \texttt{join(+,\ -)} yields \texttt{*}
-  \item
-    \texttt{f2} is updated, therefore, another iteration is needed.
+    Iteration 2:
+
+    \begin{itemize}
+    \tightlist
+    \item
+      Current values: \texttt{f0=+}, \texttt{f1=o}, \texttt{f2=*}.
+    \item
+      Processing same constraint.
+    \item
+      \texttt{transform(+,\ b0)} still yields \texttt{-}.
+    \item
+      \texttt{join(*,\ -)} remains \texttt{*}.
+    \item
+      No update to \texttt{f2}, computation concludes.
+    \end{itemize}
   \end{itemize}
 \item
-  Iteration 2:
+  Final variances: \texttt{f0=+}, \texttt{f1=o}, \texttt{f2=*}:
 
   \begin{itemize}
   \tightlist
   \item
-    Current values are \texttt{f0=+}, \texttt{f1=o} and \texttt{f2=*}
+    \texttt{f0} is evident.
   \item
-    Processing constraint \texttt{f2\ =\ join(f2,\ transform(+,\ b0))}
+    \texttt{f1} remains bivariant, as it is unmentioned in the type.
   \item
-    \texttt{transform(+,\ b0)} where \texttt{b0=-} yields \texttt{-}
-  \item
-    \texttt{join(*,\ -)} yields \texttt{*}
-  \item
-    \texttt{f2} is not updated, therefore, the computation is finished.
+    \texttt{f2} is invariant due to its usage in both covariant and
+    contravariant positions.
   \end{itemize}
-\item
-  The final variance is \texttt{f0=+}, \texttt{f1=o} and \texttt{f2=*}:
-\item
-  \texttt{f0} is evident,
-\item
-  \texttt{f1} stayed bivariant, because it was not mentioned in the
-  type,
-\item
-  \texttt{f2} is invariant, because it s is used in both covariant and
-  contravariant positions.
 \end{itemize}
 \end{quote}
 
-Once all types in the crate are processed, the constraints are solved
-using a fixed-point computation. Note that the current crate can use
-generic types from other crates, and therefore, it has to export/load
-the variance of public types.
+After processing all types in the crate, constraints are resolved using
+the fixed-point computation. Note that current crates might use generic
+types from other crates, necessitating the export/load of variance for
+public types.
 
-\section{Error Reporting}\label{error-reporting}
+\section{Error Reporting}\label{sec:error-reporting}
 
 As each function is analyzed separately, the compiler can easily report
 which functions violate the rules. Currently, only the kind of violation
 is communicated from the Polonius engine to the compiler. More detailed
-reporting is an issue for future work.
+reporting is an area for future work.
 
-There are three possible ways for the more detailed reporting to be
-implemented.
+There are three possible approaches for implementing more detailed
+reporting:
 
-The first is to pass all the violations back to the compiler to be
-processed as a return value of the Polonius FFI invocation. This variant
-provides a simple separation of roles between the compiler and the
-analysis engine. However, it might be difficult to implement correctly
-with regard to memory ownership around the FFI boundary, since Polonius
-would need to allocate dynamically sized memory to pass the result.
-Polonius would need to implement a special API to release the memory.
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  \emph{Returning All Violations:} This method involves passing all
+  violations back to the compiler as a return value of the Polonius FFI
+  invocation. It offers a clear separation of roles between the compiler
+  and the analysis engine. However, implementing this correctly could be
+  challenging due to memory ownership concerns at the FFI boundary.
+  Polonius would need to allocate dynamically sized memory for the
+  result and provide an API for its release.
+\item
+  \emph{Callback Function for Error Reporting:} Another option is to
+  provide the Polonius engine with a callback function to report each
+  found error. But, as Polonius only possesses information in terms of
+  the enumerated nodes of the control flow graph, a pointer to an
+  instance of the borrow checker would also need to be passed. This
+  pointer would be used in conjunction with the callback to map nodes
+  back to the actual code. However, this approach compromises the
+  separation of roles, where Polonius and Polonius FFI act solely as
+  external computation engines.
+\item
+  \emph{Compiler-Side Allocation via Callback Functions:} A compromise
+  between these two methods would be to supply Polonius with callback
+  functions that relay violations to the compiler one at a time, keeping
+  memory allocation on the compiler side.
+\end{enumerate}
 
-The second variant is to pass a callback function to report the errors
-found to the Polonius engine, which would be called for each violation.
-However, Polonius only has information in terms of the enumerated nodes
-of the control flow graph. Therefore, a pointer to an instance of the
-borrow checker would need to be passed to the Polonius engine to be used
-in combination with the callback to resolve the nodes to the actual
-code. The separation of roles, where Polonius and Polonius FFI are used
-just as external computation engines, is broken.
+Additionally, the borrow checker does not currently store information to
+trace the nodes back to their source code locations. This limitation is
+purely technical and can be addressed straightforwardly with localized
+changes. Given the experimental nature of this work, the focus has been
+on analysis over detailed error reporting.
 
-A compromise between these variants would be to provide Polonius with
-callback functions, which would send the violations to the compiler one
-by one, leaving the allocation on the compiler side only.
+The final stage in developing the borrow checker would involve
+implementing heuristics to infer the reasons for errors and suggest
+potential fixes.
 
-Moreover, the borrow checker currently does not store information to map
-the nodes back to the source code locations. This issue is clearly
-technical only, and the functionality can be added easily with local
-changes only. Since this work has an experimental character, work on the
-analysis itself was prioritized over more detailed error reporting.
-
-The final stage of the development of the borrow checker would be to
-implement heuristics to guess the reason for the error and suggest
-possible fixes.
-
-\chapter{Implementation}\label{implementation}
+\chapter{Implementation}\label{sec:implementation}
 
 After the initial experiments described in
 sec.~\ref{sec:analysis-of-the-fact-collection-problem}, the project was
 implemented in the following phases: First, an initial version of the
 borrow checker IR (BIR), lowering from HIR to BIR (the BIR builder), and
-textual BIR dump were implemented. Second, the first version of the BIR
-fact collection and the Polonius FFI were implemented. At this stage,
-the first simple error detections were tested. Next, the implementation
-had to be extended to handle more complex data types, especially generic
-ones. Finally, the BIR fact collection was extended to handle the new
+a textual BIR dump were implemented. Second, the first version of the
+BIR fact collection and the Polonius FFI were added. At this stage, the
+first simple error detections were tested. Next, the implementation was
+extended to handle more complex data types, especially generics.
+Finally, the BIR fact collection was extended to handle the new
 information and emit all available facts.
 
 The initial version of the borrow checker included only the minimal
-possible information that the borrow checker was expected to need. The
-builder was able to lower most operator and initializer expressions,
-borrow expressions, function calls, and simple control flow operations
+information that the borrow checker was expected to need. The builder
+was able to lower most operator and initializer expressions, borrow
+expressions, function calls, and simple control flow operations
 (\texttt{if}, \texttt{if/else}, \texttt{while}, \texttt{loop},
-\texttt{return}). The whole compiler was
+\texttt{return}). The compiler was
 \href{https://github.com/Rust-GCC/gccrs/pull/2689}{extended} to handle
-labeled\href{https://doc.rust-lang.org/reference/expressions/loop-expr.html\#labelled-block-expressions}{blocks}
-to be able to lower (and test) \texttt{break} and \texttt{continue}
-expressions. Note that in the Rustc language, \texttt{break} and
-\texttt{continue} keywords can be used with a label identifier to break
-out of a nested loop, and it can be used to return a value out of any
-labeled block\citeproc{ref-reference}{{[}7{]}}. The BIR dump was
-designed to be as similar to MIR as possible to allow for manual
-verification of the BIR. This part turned out to have some issues
-because rustc performs many transformations of MIR, and there are many
-versions of the dump available. Originally, the dump from the online
-\href{https://godbolt.org/}{Compiler Explorer} was used as it was easily
-available. However, this version of MIR is optimized and cleaned up. It
-was very complicated to keep up with this dump, as it required some
-additional transformation of the BIR. This fact led to the decision to
-change the reference MIR dump. MIR after each MIR pass can be exported
-from rustc using the flag \texttt{-Zdump-mir=*}. In addition, there is
-also the option \texttt{-Zunpretty=mir}. The logical choice was to
-continue with the MIR version used for borrow checking
-(\texttt{-Zdump-mir=nll}). This version is not very optimized and
-contains additional information for borrow checking. Most of the BIR
-transformations had to be removed after this change of the reference MIR
-dump. This initial version of BIR and related infrastructure was
-submitted to Rust GCC in
-\href{https://github.com/Rust-GCC/gccrs/pull/2702}{pull request 2702}.
-This PR added 3,779 lines of new code. This included a document called
-``BIR Design Notes'' that was written to help new developers get
-familiar with the borrow checker implementation. It can be found in the
-file
+\href{https://doc.rust-lang.org/reference/expressions/loop-expr.html\#labelled-block-expressions}{labeled
+blocks} to lower (and test) \texttt{break} and \texttt{continue}
+expressions. Note that in the Rust language, \texttt{break} and
+\texttt{continue} can use label identifiers to exit nested loops or
+return a value from any labeled block\citeproc{ref-reference}{{[}14{]}}.
+
+The BIR dump was designed to be as similar to MIR as possible for manual
+verification. However, rustc performs many transformations on MIR, and
+there are various versions of the dump available. Originally, the MIR
+dump from the online \href{https://godbolt.org/}{Compiler Explorer} was
+used, but this version is optimized and cleaned up. It proved
+complicated to align with this dump, requiring additional BIR
+transformations. This led to the decision to change the reference MIR
+dump. MIR after each MIR pass can be exported from rustc using the
+\texttt{-Zdump-mir=*} flag. Additionally, the \texttt{-Zunpretty=mir}
+option is available. The logical choice was to use the MIR version for
+borrow checking (\texttt{-Zdump-mir=nll}), which is less optimized and
+contains additional borrow checking information. Most BIR
+transformations were removed after this change ot the reference MIR
+dump.
+
+This initial BIR version and related infrastructure were submitted to
+Rust GCC in \href{https://github.com/Rust-GCC/gccrs/pull/2702}{pull
+request 2702}, adding 3,779 lines of new code, including a document
+titled ``BIR Design Notes'' to assist new developers with the borrow
+checker implementation. It is located in
 \href{https://github.com/Rust-GCC/gccrs/blob/df5b6a371dba385e4bb03ebd638cd473c4cc38eb/gcc/rust/checks/errors/borrowck/bir-design-notes.md}{\texttt{gcc/rust/checks/errors/borrowck/bir-design-notes.md}}.
 
 In the second phase, the fact collection and an interface to the
-Polonius engine were implemented. At this stage, only lifetimes of
-simple references were handled (at most one lifetime per type). Fact
-collection processed all the places in the place database and walked the
-BIR control flow graphs. The interface to Polonius consists of a C ABI
-in gccrs and a C ABI (generated by
+Polonius engine were implemented. Initially, only lifetimes of simple
+references were handled (at most one lifetime per type). Fact collection
+processed all places in the place database and traversed the BIR control
+flow graphs. The interface to Polonius consists of a C ABI in gccrs and
+a C ABI (generated by
 \href{https://github.com/rust-lang/rust-bindgen}{rust-bindgen} and
-manually cleaned up and extended) in a small static library in Rust (FFI
-Polonius). The role of the FFI Polonius library is to invoke the
-Polonius engine. A discussion about the integration of this interface
-into the GCC build system was started in
-\href{https://github.com/Rust-GCC/gccrs/pull/2716}{pull request draft
-2716}. This problem is very complicated because it requires compilation
-of Rustc code that is beyond the current capabilities of gccrs. For
-development purposes, the Cargo build system (rustc) is invoked from the
-GCC Makefile. This solution is not viable for production because it does
-not handle cross-compilation well. However, this solution is the best
-for developer experience. It was decided that, for the time being, the
-build integration will be kept downstream. The most viable solution for
-upstreaming is to release the Polonius FFI as a dynamic library and keep
-the building outside GCC. The final decision will be made when the
-borrow checker is ready for a public release. For this reason, this
-phase was not submitted to Rust GCC. Newer independent commits are
-rebased below the FFI commit and submitted separately. At this stage,
-the borrow checker successfully detected
+manually cleaned up and extended) in a small static Rust library (FFI
+Polonius). The FFI Polonius library's role is to invoke the Polonius
+engine. A discussion about integrating this interface into the GCC build
+system began in \href{https://github.com/Rust-GCC/gccrs/pull/2716}{pull
+request draft 2716}. This integration is complex, requiring compilation
+of Rustc code beyond gccrs's current capabilities. For development
+purposes, the Cargo build system (rustc) is invoked from the GCC
+Makefile. While not ideal for production due to no cross-compilation
+handling, this solution is optimal for development. It was decided to
+keep the build integration downstream for the time being. The most
+viable solution for upstreaming is to release the Polonius FFI as a
+dynamic library, with the building process outside GCC. The final
+decision on this will be made when the borrow checker is ready for
+public release. Therefore, this phase was not submitted to Rust GCC,
+with newer independent commits rebased below the FFI commit and
+submitted separately. At this stage, the borrow checker successfully
+detected
 \href{https://doc.rust-lang.org/error_codes/E0382.html}{repeated moves},
 basic subset errors (i.e., insufficient constraints between inputs and
-outputs of the function were specified), and
-\href{https://doc.rust-lang.org/error_codes/E0507.html}{moves behind} a
-reference{]}(https://doc.rust-lang.org/error\_codes/E0507.html). At this
-stage, error output was implemented using only the FFI Polonius debug
-output (see the example).
+outputs of functions), and
+\href{https://doc.rust-lang.org/error_codes/E0507.html}{moves behind a
+reference}. Error output was implemented using only the FFI Polonius
+debug output at this stage (see the example).
 
 \begin{quote}
 \begin{Shaded}
@@ -1964,105 +1964,101 @@ output (see the example).
 \end{Shaded}
 
 \textbf{Example:} FFI Polonius debug output for a simple program with a
-move error.
+move error. The output reports that at a CFG point encoded as the number
+11, a path number 2 was moved illegally.
 \end{quote}
 
-In the third (and final) phase, the whole borrow checker, the TyTy IR,
-and the type checker had to be extended to support complex types with
-multiple lifetimes (regions). Variance analysis and helper region tools
-were implemented. The BIR builder and fact collection were extended to
-handle the new information and emit all the available facts. Correct
-fact collection is a very complicated subject because there is very
-little documentation of the facts and their relation with Rust code. The
-current implementation is based on the Polonius
-Book\citeproc{ref-polonius}{{[}11{]}}, the Polonius source
-code\citeproc{ref-poloniusSource}{{[}17{]}}, the rustc source
-code\citeproc{ref-rustcSource}{{[}18{]}}, and experiments using rustc
-and the Polonius CLI. Some facts are probably missing or incorrectly
+In the third (and final) phase, the entire borrow checker, the TyTy IR,
+and the type checker were extended to support complex types containing
+multiple regions (lifetimes). Variance analysis and helper region tools
+were implemented. The BIR builder and fact collection were expanded to
+handle the new information and emit all available facts. Correctly
+collecting facts is challenging due to limited documentation of the
+facts and their relationship with Rust code. The current implementation
+relies on the Polonius Book\citeproc{ref-polonius}{{[}10{]}}, the
+Polonius source code\citeproc{ref-poloniusSource}{{[}17{]}}, the rustc
+source code\citeproc{ref-rustcSource}{{[}18{]}}, and experiments using
+rustc and the Polonius CLI. Some facts might be missing or incorrectly
 collected.
 
-The borrow checker could find most errors that violate the access rules
+The borrow checker could identify most errors that violate access rules
 (number of loans of a given type allowed, loan/access conflicts),
-move/initialization errors, and subset errors. To demonstrate the
-functionality, a small test suite was created. It was based on tests
-included in the Polonius project and extended with custom ones. A
-logical step would be to test the borrow checker against the rustc test
-suite. However, at the current stage of Rust GCC, most of the test suite
-used by rustc to check its borrow checker are incompatible because it
-uses the Rust standard library, which gccrs is unable to compile.
-Examples from the gccrs borrow checker test suite can be found in the
-appendix.
+move/initialization errors, and subset errors. To demonstrate its
+functionality, a small test suite was created based on tests from the
+Polonius project, supplemented with custom ones. Ideally, the borrow
+checker would be tested against rustc test suite, but gccrs is currently
+unable to compile most of these tests as they rely on the Rust standard
+library. Examples from the gccrs borrow checker test suite are available
+in the appendix.
 
-This phase is awaiting final cleanup and submission in branch
+This phase is pending final cleanup and submission in the branch
 \href{https://github.com/jdupak/gccrs/tree/borrowck-stage2}{borrowck-stage2}.
-It includes 5146 additions and 720 deletions. This phase is expected to
-be submitted to Rust GCC in the near future.
+It includes 5146 additions and 720 deletions and is expected to be
+submitted to Rust GCC soon.
 
-\section{Limitations}\label{limitations}
+\section{Limitations}\label{sec:limitations}
 
-The main bottleneck of the current implementation is the BIR builder.
-After covering a subset of Rust that was sufficient to handle enough
-examples to test the error detection capability, this work focused on
-other parts of the borrow checker to implement all necessary parts, even
-if in a limited fashion. Following is a list of known limitations of the
-current implementation.
+The main bottleneck in the current implementation is the BIR builder.
+After covering a subset of Rust sufficient for testing error detection
+capabilities, the focus shifted to other aspects of the borrow checker
+to implement all necessary parts, even if in a limited fashion. Below is
+a list of known limitations of the current implementation.
 
 \subsection{BIR and BIR Builder}\label{sec:bir-and-bir-builder}
 
 \begin{itemize}
 \tightlist
 \item
-  Only nongeneric functions (not closures or
+  Currently, only nongeneric functions are supported (not closures or
   \href{https://doc.rust-lang.org/nightly/reference/items/associated-items.html\#associated-functions-and-methods}{associated
-  functions and methods}) are currently supported. Other function-like
-  items require special top-level handling. The handling of the body is
-  identical. Generic functions must be monomorphised before checking.
+  functions and methods}). Other function-like items require special
+  top-level handling, though their body handling is identical. Generic
+  functions must be monomorphised before checking.
 \item
-  Method calls are not handled due to implicit coercion of the
+  Method calls are not handled due to required implicit coercion of the
   \texttt{self} argument.
 \item
-  Operator \texttt{?} and \texttt{while\ let} are not handled. They are
-  planned to be removed from HIR and desugared on the
-  \texttt{AST-\textgreater{}HIR} boundary.
+  The \texttt{?} operator and \texttt{while\ let} are not addressed.
+  They will be removed at the \texttt{AST-\textgreater{}HIR} boundary.
 \item
-  \texttt{if\ let} and \texttt{match} expressions are not handled due to
-  missing handling for pattern detection (the selection of variant).
-  Pattern destructuring is mostly implemented and used for \texttt{let}
-  expressions and for function parameters. The
+  Handling for \texttt{if\ let} and \texttt{match} expressions is
+  missing, particularly for pattern detection (variant selection).
+  Pattern destructuring is mostly implemented for \texttt{let}
+  expressions and function parameters. The
   \href{https://doc.rust-lang.org/reference/patterns.html\#or-patterns}{\texttt{or}
-  pattern} is not supported. The declaration of a pattern without
-  initial value is not supported except for the
+  pattern} is unsupported, as is pattern declaration without an initial
+  value, except for
   \href{https://doc.rust-lang.org/reference/patterns.html\#identifier-patterns}{identifier
-  pattern}.
+  patterns}.
 \item
   \href{https://doc.rust-lang.org/reference/types/enum.html}{Enums} are
   not supported.
 \item
-  Unsafe blocks are not supported.
+  Unsafe blocks are not handled.
 \item
   Asynchronous code is completely unsupported in the compiler.
 \item
-  Unwind paths (drops) are not created. Drops are not supported by the
-  compiler.
+  Unwind paths (drops) are not created, as drops are not supported by
+  the compiler.
 \item
   \href{https://rustc-dev-guide.rust-lang.org/borrow_check/two_phase_borrows.html}{Two-phase
-  borrowing} is not implemented. This is not needed for correctness, but
-  it reduced false positives of the borrow checker.
+  borrowing} is not implemented. While not essential for correctness, it
+  reduces false positives.
 \item
-  Location information is not stored. This is necessary for practical
+  Location information is not stored, which is necessary for practical
   error reporting.
 \item
-  Copy trait probing is not performed. The \texttt{Copy} trait is only
-  derived for primitive types and tuples of primitive types.
+  Copy trait probing is not performed. The \texttt{Copy} trait is
+  derived only for primitive types and tuples of primitive types.
 \item
-  Not all fake operations are represented and emitted (e.g.,
-  \texttt{fake\_unwind}).
+  Not all fake operations (e.g., \texttt{fake\_unwind}) are represented
+  or emitted.
 \item
-  Advanced projections like \texttt{cast} might need more complex
+  Advanced projections like \texttt{cast} might require more complex
   handling.
 \end{itemize}
 
-\subsection{Parsing, AST, HIR, TyTy}\label{parsing-ast-hir-tyty}
+\subsection{Parsing, AST, HIR, TyTy}\label{sec:parsing-ast-hir-tyty}
 
 \begin{itemize}
 \tightlist
@@ -2070,83 +2066,81 @@ current implementation.
   \href{https://doc.rust-lang.org/nightly/reference/lifetime-elision.html\#lifetime-elision}{Lifetime
   elision} is not handled.
 \item
-  Variance analysis does not import and export variance information
-  using the metadata export. Currently, the analysis only considers one
-  crate.
+  Variance analysis does not import or export variance information via
+  metadata export and currently only considers one crate.
 \item
-  Region propagation in the type checker needs more testing. Especially
-  cases regarding traits.
+  Region propagation in the type checker requires further testing,
+  particularly in cases involving traits.
 \item
   \href{https://doc.rust-lang.org/reference/trait-bounds.html\#higher-ranked-trait-bounds}{Late-bound
-  lifetimes} are not handled.
+  lifetime} instantiation is unaddressed.
 \end{itemize}
 
-\subsection{Fact Collection}\label{fact-collection}
+\subsection{Fact Collection}\label{sec:fact-collection}
 
 \begin{itemize}
 \tightlist
 \item
-  The implicit constraint between a reference and its base type
+  Implicit constraints between a reference and its base type
   (\texttt{\&\textquotesingle{}a\ T\ =\textgreater{}\ T:\ \textquotesingle{}a})
-  is not collected.
+  are not collected.
 \item
   The collection of the \texttt{loan\_killed\_at} fact is simplified.
 \item
   Drop and unwind-related handling is not implemented due to incomplete
-  support in other parts of the borrow checker.
+  support elsewhere in the borrow checker.
 \item
   \href{https://rustc-dev-guide.rust-lang.org/borrow_check/two_phase_borrows.html}{Two-phase
-  borrowing} is not implemented. See sec.~\ref{sec:bir-and-bir-builder}.
+  borrowing} is unaddressed. Refer to
+  sec.~\ref{sec:bir-and-bir-builder}.
 \item
-  The reason for loan invalidation is not stored. This is necessary for
-  practical error reporting.
+  The reasons for loan invalidation are not stored, which is necessary
+  for practical error reporting.
 \item
-  Rustc stores priority for subset facts to display more relevant
-  errors. This is not implemented in gccrs.
+  Rustc prioritizes subset facts for displaying more relevant errors.
+  This is not implemented in gccrs.
 \end{itemize}
 
 \subsection{Polonius FFI and Error
-Reporting}\label{polonius-ffi-and-error-reporting}
+Reporting}\label{sec:polonius-ffi-and-error-reporting}
 
 \begin{itemize}
 \tightlist
 \item
-  Current integration with the build system is not viable for
-  production. See the beginning of this
-  \hyperref[implementation]{chapter}.
+  The current integration with the build system is not viable for
+  production. Refer to the beginning of this
+  \hyperref[implementation]{chapter} for details.
 \item
-  Only information about the violation's presence and its category is
-  passed back to the borrow checker- no details about the violation
-  itself are passed back.
+  Only information about the presence and category of violations is
+  passed back to the borrow checker; details about the violations
+  themselves are not.
 \item
-  Errors are reported only on function level (and using debug output).
-  This can be problematic for automated testing because the test might
-  fail/succeed for the wrong reason.
+  Errors are reported only at the function level (and using debug
+  output), which can be problematic for automated testing if tests fail
+  or succeed for incorrect reasons.
 \end{itemize}
 
 \section{Building, Usage, and
-Debugging}\label{building-usage-and-debugging}
+Debugging}\label{sec:building-usage-and-debugging}
 
-This section provides the reader with basic information on how to build
-gccrs and use the borrow checker. It also provides tips for debugging.
+This section provides references and basic information on how to build
+gccrs and use the borrow checker, along with tips for debugging.
 
 The latest source code is available in the author's
-\href{https://github.com/jdupak/gccrs/}{fork} in the branch
+\href{https://github.com/jdupak/gccrs/}{fork} on the branch
 \href{https://github.com/jdupak/gccrs/tree/borrowck-stage2}{\texttt{borrowck-stage2}}.
 
-Detailed instructions on how to build gccrs can be found in the
-\texttt{README.md} in the root of the project. For tips on a better
-development experience (e.g., faster builds), the reader can refer to
-\citeproc{ref-svp}{{[}19{]}}.
+Detailed instructions for building gccrs are in the \texttt{README.md}
+file in the project's root directory. For tips on a better development
+experience (e.g., faster builds), refer to \citeproc{ref-svp}{{[}19{]}}.
 
-The compiler binary is called \texttt{crab1}, and after building, it is
-located in the \texttt{gcc} directory in the chosen build directory.
-Since gccrs is still very experimental, a special flag
-\texttt{-frust-incomplete-and-experimental-compiler-do-not-use} needs to
-be added to use the compiler. Subsequently, the
-\texttt{-frust-borrowcheck} flag needs to be used to enable the borrow
-checker. If any borrow checker error is detected, it will be reported as
-a standard compilation error.
+The compiler binary is named \texttt{crab1}, and it is located in the
+\texttt{gcc} directory within the chosen build directory after building.
+Since gccrs is still experimental, the flag
+\texttt{-frust-incomplete-and-experimental-compiler-do-not-use} is
+required to use the compiler. To enable the borrow checker, add the
+\texttt{-frust-borrowcheck} flag. Any detected borrow checker errors
+will be reported as standard compilation errors.
 
 \begin{quote}
 \begin{Shaded}
@@ -2162,15 +2156,15 @@ a standard compilation error.
 \end{Shaded}
 \end{quote}
 
-To further inspect the working of the borrow checker, a debug build of
-the compiler is needed. The flag \texttt{-frust-debug} enables debug
-logs that include the work of the borrow checker. Unfortunately, the GCC
-debug logging does not support filtering by category. Three parts may
-interest the reader: log of the variance analysis, log of the borrow
-checker (BIR build and fact collector), and debug output of Polonius.
-This flag also enables the BIR dump (saved to
+For a deeper inspection of the borrow checker, a debug build of the
+compiler is necessary. The \texttt{-frust-debug} flag enables debug
+logs, including the borrow checker activity. Unfortunately, GCC's debug
+logging lacks category filtering. The reader may find the variance
+analysis log, the borrow checker log (BIR build and fact collector), and
+Polonius debug output particularly interesting. This flag also activates
+the BIR dump (saved to
 \texttt{./bir\_dump/\textless{}crate\_name?\textgreater{}/\textless{}function\_name?\textgreater{}.bir.dump})
-and facts dump (saved to
+and \emph{facts} dump (saved to
 \texttt{nll\_facts\_gccrs/\textless{}function\_name\textgreater{}.facts}).
 
 \begin{quote}
@@ -2208,79 +2202,66 @@ and facts dump (saved to
 \end{Shaded}
 \end{quote}
 
-\begin{quote}
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{Subsets}\OperatorTok{:}
-\NormalTok{ Mid(bb0[}\DecValTok{3}\NormalTok{])}\OperatorTok{:} \OperatorTok{\{}
-     \DecValTok{2} \OperatorTok{\textless{}=} \DecValTok{1}
- \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
-\end{quote}
-
-To get the corresponding output from rustc, use flags
+To obtain similar output from rustc, use the flags
 \texttt{-Znll-facts\ -Zdump-mir=nll\ -Zidentify-regions}. With a debug
-build of rustc, the reader can also enable the debug log of the borrow
-checker using the environmental variable
-\texttt{RUSTC\_LOG=rustc\_borrowck}. Building of the rustc compiler is
-described in the
+build of rustc, you can also enable the borrow checker debug log using
+the environment variable \texttt{RUSTC\_LOG=rustc\_borrowck}. Building
+rustc is described in the
 \href{https://rustc-dev-guide.rust-lang.org/building/how-to-build-and-run.html}{Rustc
 Developer Guide}.
 
-For more complex debugging and inspection, gdb/lldb can be used as
-usual. One issue the reader may encounter is that LLDB might not be able
-to identify virtual classes correctly. A simple LLDB formatter to
-resolve TyTy classes based on internal identifiers can be found in
+For more advanced debugging and inspection, gdb/lldb can be used as
+usual. A common issue with LLDB is its difficulty in correctly
+identifying virtual classes. To address this, a simple LLDB formatter
+for resolving TyTy classes based on internal identifiers is available in
 \href{https://gist.github.com/jdupak/68af0f0ad91f3e6eba2c478dc4f662dd}{this
-gist}.
+gist}. This script can be used as a template and can be adapted to other
+classes suffering from this problem.
 
-\chapter{Conclusion}\label{conclusion}
+\chapter{Conclusion}\label{sec:conclusion}
 
-The goal of this project was to implement a prototype of a
-Polonius-based borrow checker for Rustc GCC to explore the feasibility
-of this approach and provide code infrastructure for further
-development. The project was implemented in a
-\href{https://github.com/jdupak/gccrs/}{personal fork}, and stabilized
-parts are being submitted to the main
-\href{https://github.com/Rust-GCC/gccrs}{Rustc GCC GitHub repository}.
-All accepted changes are scheduled to be included in the
-\href{https://gcc.gnu.org/git/}{central GCC repository} by the
-maintainers of Rust CGG with the help of the author.
+This project aimed to implement a prototype of a Polonius-based borrow
+checker for Rustc GCC to explore the feasibility of this approach and
+establish a code infrastructure for further development. The development
+was conducted in a \href{https://github.com/jdupak/gccrs/}{personal
+fork} of Rust GCC, and stabilized parts are being integrated into the
+main \href{https://github.com/Rust-GCC/gccrs}{Rustc GCC GitHub
+repository}. All accepted changes are scheduled to be integrated into
+the \href{https://gcc.gnu.org/git/}{central GCC repository} by the
+maintainers of Rust GCC with the help of the author.
 
 This text described the problem of borrow checking, mapped the situation
 in rustc and gccrs, and presented the design of the solution, as well as
-the experiments that led to this design. The prototype version of the
-implemented borrow checker can detect the most common errors in simple
-Rust code. Those include violations of access rules (number of allowed
-loans of a given type, loan/access conflicts), move/initialization
-errors, and subset errors. Examples of detected errors can be found in
-the appendix.
+the experiments that led to it. The prototype version of the implemented
+borrow checker can detect most common errors in simple Rust code. These
+include violations of access rules (number of allowed loans of a given
+type, loan/access conflicts), move/initialization errors, and subset
+errors. Examples of detected errors can be found in the appendix.
 
-The last chapter provides an overview of the limitations of the current
-implementation. The limitations are not fundamental and should be
-possible to resolve by simple extensions and implementation of missing
-cases in the existing code. Future work should address this limitation
-to provide a production-ready solution.
+The last chapter provides an overview of the prototype's limitations.
+These limitations are not fundamental and should be resolvable with
+simple extensions and implementation of missing cases in the existing
+code. Future work should address these limitations to provide a
+production-ready solution.
 
-The problem of borrow checking is very complex, and a complete solution
-is expected to take months, if not years, of future work. This project
-provides a significant stepping stone on the way to a production ready
-solution, as the prototype provides substantive infrastructure for
-further development and solutions to most of the hard problems.
+Given the complex nature of borrow checking, a comprehensive, fully
+functional solution is likely to take months, if not years, of future
+work. This project provides a significant stepping stone toward a
+production-ready solution, offering extensive infrastructure for further
+development and solutions to most of the challenging problems identified
+in the analysis.
 
 I believe that the Rust programming language will play a significant
 role in systems programming, and I would like to continue working on
-this project, other problems in Rustc GCC, or the rustc compiler itself.
-It would seem that there is considerable interest in the industry as
-well, since Bradley Spengler, President of Open Source Security, Inc.,
-one of two main sponsors of Rust GCC, expressed interest in financially
-supporting my continued work on Rust GCC. I am very grateful for this
-opportunity.
+this project, on other problems in Rustc GCC, or on the rustc compiler
+itself. There appears to be considerable interest in the industry as
+well. Bradley Spengler, President of Open Source Security, Inc., one of
+the two main sponsors of Rust GCC, has expressed interest in financially
+supporting my continued work on Rust GCC.
 
 \appendix
 
-\chapter{References}\label{references}
+\chapter{References}\label{sec:references}
 
 \phantomsection\label{refs}
 \begin{CSLReferences}{0}{0}
@@ -2323,20 +2304,14 @@ Dec. 29, 2023. {[}Online{]}. Available:
 2023. {[}Online{]}. Available:
 \url{https://cwe.mitre.org/data/definitions/416.html}}
 
-\bibitem[\citeproctext]{ref-reference}
-\CSLLeftMargin{{[}7{]} }%
-\CSLRightInline{Rustc developers, \emph{Reference}. Rust Foundation,
-2023. Accessed: Dec. 07, 2023. {[}Online{]}. Available:
-\url{https://doc.rust-lang.org/reference/}}
-
 \bibitem[\citeproctext]{ref-rfc2094nll}
-\CSLLeftMargin{{[}8{]} }%
+\CSLLeftMargin{{[}7{]} }%
 \CSLRightInline{N. Matsakis, {``2094-nll,''} in \emph{The {R}ust {RFC}
 {B}ook}, Rust Foundation, 2017. Accessed: Dec. 18, 2023. {[}Online{]}.
 Available: \url{https://rust-lang.github.io/rfcs/2094-nll.html}}
 
 \bibitem[\citeproctext]{ref-Stjerna2020}
-\CSLLeftMargin{{[}9{]} }%
+\CSLLeftMargin{{[}8{]} }%
 \CSLRightInline{A. Stjerna, {``{M}odelling {R}ust's {R}eference
 {O}wnership {A}nalysis {D}eclaratively in {D}atalog,''} Master's thesis,
 Uppsala University, 2020. Accessed: Dec. 28, 2023. {[}Online{]}.
@@ -2344,34 +2319,40 @@ Available:
 \url{https://www.diva-portal.org/smash/get/diva2:1684081/fulltext01.pdf}}
 
 \bibitem[\citeproctext]{ref-polonius2}
-\CSLLeftMargin{{[}10{]} }%
+\CSLLeftMargin{{[}9{]} }%
 \CSLRightInline{N. Matsakis, {``Polonius revisited, part 1.''} Sep. 22,
 2023. Accessed: Dec. 17, 2023. {[}Online{]}. Available:
 \url{https://smallcultfollowing.com/babysteps/blog/2023/09/22/polonius-part-1/}}
 
 \bibitem[\citeproctext]{ref-polonius}
-\CSLLeftMargin{{[}11{]} }%
+\CSLLeftMargin{{[}10{]} }%
 \CSLRightInline{N. Matsakis, R. Rakic, \emph{et al.}, {``{T}he
 {P}olonius {B}ook.''} Rust Foundation, 2021.}
 
 \bibitem[\citeproctext]{ref-llvm}
-\CSLLeftMargin{{[}12{]} }%
+\CSLLeftMargin{{[}11{]} }%
 \CSLRightInline{\emph{Reference}. LLVM Project, 2023. Accessed: Dec. 15,
 2023. {[}Online{]}. Available:
 \url{https://llvm.org/docs/Reference.html}}
 
 \bibitem[\citeproctext]{ref-gccint}
-\CSLLeftMargin{{[}13{]} }%
+\CSLLeftMargin{{[}12{]} }%
 \CSLRightInline{R. M. Stallman and the GCC Developer Community,
 \emph{{GNU} {C}ompiler {C}ollection {I}nternals}, 14th ed. Free Software
 Foundation, 2023. Accessed: Dec. 18, 2023. {[}Online{]}. Available:
 \url{https://gcc.gnu.org/onlinedocs/gccint/}}
 
 \bibitem[\citeproctext]{ref-devguide}
-\CSLLeftMargin{{[}14{]} }%
+\CSLLeftMargin{{[}13{]} }%
 \CSLRightInline{\emph{{R}ust {C}ompiler {D}evelopment {G}uide}. Rust
 Foundation, 2023. Accessed: Dec. 18, 2023. {[}Online{]}. Available:
 \url{https://rustc-dev-guide.rust-lang.org/index.html}}
+
+\bibitem[\citeproctext]{ref-reference}
+\CSLLeftMargin{{[}14{]} }%
+\CSLRightInline{Rustc developers, \emph{Reference}. Rust Foundation,
+2023. Accessed: Dec. 07, 2023. {[}Online{]}. Available:
+\url{https://doc.rust-lang.org/reference/}}
 
 \bibitem[\citeproctext]{ref-zulip}
 \CSLLeftMargin{{[}15{]} }%
@@ -2420,7 +2401,7 @@ Rust Foundation, 2023. Accessed: Dec. 15, 2023. {[}Online{]}. Available:
 \end{CSLReferences}
 
 \chapter{Rustc Intermediate Representations
-Examples}\label{rustc-intermediate-representations-examples}
+Examples}\label{sec:rustc-intermediate-representations-examples}
 
 \begin{quote}
 \textbf{Compilation commands:}
@@ -2432,7 +2413,7 @@ Examples}\label{rustc-intermediate-representations-examples}
 \texttt{\$\ rustc\ -Z\ unpretty=mir\ -Z\ identify-regions}
 \end{quote}
 
-\section{Rust Source Code}\label{rust-source-code}
+\section{Rust Source Code}\label{sec:rust-source-code}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -2446,7 +2427,7 @@ Examples}\label{rustc-intermediate-representations-examples}
 
 \clearpage
 
-\section{Abstract Syntax Tree (AST)}\label{abstract-syntax-tree-ast}
+\section{Abstract Syntax Tree (AST)}\label{sec:abstract-syntax-tree-ast}
 
 \begin{verbatim}
 
@@ -2598,7 +2579,7 @@ Fn {
 \normalsize
 
 \section{High-Level Intermediate Representation
-(HIR)}\label{high-level-intermediate-representation-hir}
+(HIR)}\label{sec:high-level-intermediate-representation-hir}
 
 \small
 
@@ -2771,7 +2752,7 @@ Expr {
 \normalsize
 
 \section{Mid-Level Intermediate Representation
-(MIR)}\label{mid-level-intermediate-representation-mir}
+(MIR)}\label{sec:mid-level-intermediate-representation-mir}
 
 \begin{verbatim}
 fn foo(_1: i32) -> Foo {
@@ -2794,13 +2775,13 @@ fn Foo(_1: i32) -> Foo {
 }
 \end{verbatim}
 
-\chapter{Comparison of BIR and MIR}\label{comparison-of-bir-and-mir}
+\chapter{Comparison of BIR and MIR}\label{sec:comparison-of-bir-and-mir}
 
 BIR and MIR dump of the following code are displayed parallel, BIR on
 left pages and MIR on right pages. Note that assert macros in MIR were
 simplified to fit onto the page.
 
-\section{Compilation Commands}\label{compilation-commands}
+\section{Compilation Commands}\label{sec:compilation-commands}
 
 \begin{quote}
 \begin{verbatim}
@@ -2811,7 +2792,7 @@ $ crab1 -frust-incomplete-and-experimental-compiler-do-not-use \
 \texttt{\$\ rustc\ -Zdump-mir=nll\ -Zidentify-regions}
 \end{quote}
 
-\section{Rust Source Code}\label{rust-source-code-1}
+\section{Rust Source Code}\label{sec:rust-source-code-1}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -2828,7 +2809,7 @@ $ crab1 -frust-incomplete-and-experimental-compiler-do-not-use \
 \begin{Parallel}[p]{}{}
 \ParallelLText{
 
-\section{BIR (Rustc GCC)}\label{bir-rustc-gcc}
+\section{BIR (Rustc GCC)}\label{sec:bir-rustc-gcc}
 
 \small
 
@@ -2925,7 +2906,7 @@ fn fib(_2: u32) -> u32 {
 }
 \ParallelRText{
 
-\section{MIR (rustc)}\label{mir-rustc}
+\section{MIR (rustc)}\label{sec:mir-rustc}
 
 \small
 
@@ -3044,7 +3025,7 @@ A faulty program from gccrs test suite together with a fixed alternative
 (when applicable) is presented. Expected errors are marked using special
 comments used by the DejaGnu compiler testing framework.
 
-\section{Move Errors}\label{move-errors}
+\section{Move Errors}\label{sec:move-errors}
 
 A simple test, where an instance of type A, which is not trivially
 copiable (does not implement the compy trait) is moved twice.
@@ -3121,11 +3102,11 @@ violation is possible
 \end{Shaded}
 \end{quote}
 
-\section{Subset Errors}\label{subset-errors}
+\section{Subset Errors}\label{sec:subset-errors}
 
 TODO
 
-\section{Loan Error}\label{loan-error}
+\section{Loan Error}\label{sec:loan-error}
 
 TODO
 
@@ -3186,7 +3167,7 @@ reference passed as an argument.
 \end{Shaded}
 \end{quote}
 
-\chapter{Glossary}\label{glossary}
+\chapter{Glossary}\label{sec:glossary}
 
 \begin{longtable}[]{@{}
   >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.3333}}
