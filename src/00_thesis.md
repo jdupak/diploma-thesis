@@ -648,45 +648,46 @@ This phase is pending final cleanup and submission in the branch [borrowck-stage
 
 ## Limitations
 
-The main bottleneck of the current implementation is the BIR builder. After covering a subset of Rust that was sufficient to handle enough examples to test the error detection capability, this work focused on other parts of the borrow checker to implement all necessary parts, even if in a limited fashion. Following is a list of known limitations of the current implementation.
+The main bottleneck in the current implementation is the BIR builder. After covering a subset of Rust sufficient for testing error detection capabilities, the focus shifted to other aspects of the borrow checker to implement all necessary parts, even if in a limited fashion. Below is a list of known limitations of the current implementation.
 
 ### BIR and BIR Builder {#sec:bir-and-bir-builder}
 
-- Only nongeneric functions (not closures or [associated functions and methods](https://doc.rust-lang.org/nightly/reference/items/associated-items.html#associated-functions-and-methods)) are currently supported. Other function-like items require special top-level handling. The handling of the body is identical. Generic functions must be monomorphised before checking.
-- Method calls are not handled due to implicit coercion of the `self` argument.
-- Operator `?` and `while let` are not handled. They are planned to be removed from HIR and desugared on the `AST->HIR` boundary.
-- `if let` and `match` expressions are not handled due to missing handling for pattern detection (the selection of variant). Pattern destructuring is mostly implemented and used for `let` expressions and for function parameters. The [`or` pattern](https://doc.rust-lang.org/reference/patterns.html#or-patterns) is not supported. The declaration of a pattern without initial value is not supported except for the [identifier pattern](https://doc.rust-lang.org/reference/patterns.html#identifier-patterns).
+- Currently, only nongeneric functions are supported (not closures or [associated functions and methods](https://doc.rust-lang.org/nightly/reference/items/associated-items.html#associated-functions-and-methods)). Other function-like items require special top-level handling, though their body handling is identical. Generic functions must be monomorphised before checking.
+- Method calls are not handled due to required implicit coercion of the `self` argument.
+- The `?` operator and `while let` are not addressed. They will be removed at the `AST->HIR` boundary.
+- Handling for `if let` and `match` expressions is missing, particularly for pattern detection (variant selection). Pattern destructuring is mostly implemented for `let` expressions and function parameters. The [`or` pattern](https://doc.rust-lang.org/reference/patterns.html#or-patterns) is unsupported, as is pattern declaration without an initial value, except for [identifier patterns](https://doc.rust-lang.org/reference/patterns.html#identifier-patterns).
 - [Enums](https://doc.rust-lang.org/reference/types/enum.html) are not supported.
-- Unsafe blocks are not supported.
+- Unsafe blocks are not handled.
 - Asynchronous code is completely unsupported in the compiler.
-- Unwind paths (drops) are not created. Drops are not supported by the compiler.
-- [Two-phase borrowing](https://rustc-dev-guide.rust-lang.org/borrow_check/two_phase_borrows.html) is not implemented. This is not needed for correctness, but it reduced false positives of the borrow checker.
-- Location information is not stored. This is necessary for practical error reporting.
-- Copy trait probing is not performed. The `Copy` trait is only derived for primitive types and tuples of primitive types.
-- Not all fake operations are represented and emitted (e.g., `fake_unwind`).
-- Advanced projections like `cast` might need more complex handling.
+- Unwind paths (drops) are not created, as drops are not supported by the compiler.
+- [Two-phase borrowing](https://rustc-dev-guide.rust-lang.org/borrow_check/two_phase_borrows.html) is not implemented. While not essential for correctness, it reduces false positives.
+- Location information is not stored, which is necessary for practical error reporting.
+- Copy trait probing is not performed. The `Copy` trait is derived only for primitive types and tuples of primitive types.
+- Not all fake operations (e.g., `fake_unwind`) are represented or emitted.
+- Advanced projections like `cast` might require more complex handling.
 
 ### Parsing, AST, HIR, TyTy
 
 - [Lifetime elision](https://doc.rust-lang.org/nightly/reference/lifetime-elision.html#lifetime-elision) is not handled.
-- Variance analysis does not import and export variance information using the metadata export. Currently, the analysis only considers one crate.
-- Region propagation in the type checker needs more testing. Especially cases regarding traits.
-- [Late-bound lifetimes](https://doc.rust-lang.org/reference/trait-bounds.html#higher-ranked-trait-bounds) are not handled. 
+- Variance analysis does not import or export variance information via metadata export and currently only considers one crate.
+- Region propagation in the type checker requires further testing, particularly in cases involving traits.
+- [Late-bound lifetime](https://doc.rust-lang.org/reference/trait-bounds.html#higher-ranked-trait-bounds) instantiation is unaddressed.
 
 ### Fact Collection
 
-- The implicit constraint between a reference and its base type (`&'a T => T: 'a`) is not collected.
+- Implicit constraints between a reference and its base type (`&'a T => T: 'a`) are not collected.
 - The collection of the `loan_killed_at` fact is simplified.
-- Drop and unwind-related handling is not implemented due to incomplete support in other parts of the borrow checker.
-- [Two-phase borrowing](https://rustc-dev-guide.rust-lang.org/borrow_check/two_phase_borrows.html) is not implemented. See @sec:bir-and-bir-builder.
-- The reason for loan invalidation is not stored. This is necessary for practical error reporting.
-- Rustc stores priority for subset facts to display more relevant errors. This is not implemented in gccrs.
+- Drop and unwind-related handling is not implemented due to incomplete support elsewhere in the borrow checker.
+- [Two-phase borrowing](https://rustc-dev-guide.rust-lang.org/borrow_check/two_phase_borrows.html) is unaddressed. Refer to @sec:bir-and-bir-builder.
+- The reasons for loan invalidation are not stored, which is necessary for practical error reporting.
+- Rustc prioritizes subset facts for displaying more relevant errors. This is not implemented in gccrs.
 
 ### Polonius FFI and Error Reporting
 
-- Current integration with the build system is not viable for production. See the beginning of this [chapter](#implementation). 
-- Only information about the violation's presence and its category is passed back to the borrow checker- no details about the violation itself are passed back.
-- Errors are reported only on function level (and using debug output). This can be problematic for automated testing because the test might fail/succeed for the wrong reason.
+- The current integration with the build system is not viable for production. Refer to the beginning of this [chapter](#implementation) for details.
+- Only information about the presence and category of violations is passed back to the borrow checker; details about the violations themselves are not.
+- Errors are reported only at the function level (and using debug output), which can be problematic for automated testing if tests fail or succeed for incorrect reasons.
+
 
 ## Building, Usage, and Debugging
 
