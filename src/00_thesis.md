@@ -553,11 +553,11 @@ For generic types, Rust uses definition-site variance. This means that the varia
 
 #### Variance Analysis
 
-Both rustc and gccrs variance analysis implementation is based on Section 4 of the paper @Altidor2011. The notation from the paper is followed in the documentation of both compilers, their documentation, and in this text. The paper primarily focuses on variance of complex types, like in the case of Java, but it introduces an effective formal calculus, which works nicely with higher-kinded lifetimes.
+Both rustc and gccrs implement variance analysis based on section 4 of the paper @Altidor2011. The notation from the paper is followed in the documentation of both compilers, as well as in this text. While the paper primarily focuses on the variance of complex types, like in the case of Java, it introduces an effective formal calculus, which is also applicable to higher-kinded lifetimes.
 
-The exact rules are best understood from the paper and from the code itself. Therefore, we will only provide a simple overview here. The analysis uses an iterative fixed-point computation, where variables form a semi-lattice with an additional binary operation. A single variable corresponds to a single lifetime or type parameter. Variables are initialized as bivariant.
+For a thorough understanding of the exact rules, the paper and the source code are the best resources. Here, we provide only a basic overview. The analysis employs an iterative fixed-point computation, where variables form a semi-lattice with an additional binary operation. Each variable corresponds to a single lifetime or type parameter and is initially set as bivariant.
 
-The visitor traverses each type with the current variance of the visited expression as input. Each member of a type is in a covariant position. Each member of a function parameter is in a contravariant position. The return type is in the covariant position. The position of the generic argument is determined by the variance of the generic parameter (a variable in this computation). The variance of the current node within the type is computed by the `transform` function, taking the variance of the parent node and the variance based on the position of the current node. When a lifetime or type parameter is encountered, then if the current variance expression is constant, the variable is updated to the new variance using the join operation with the current value. For an expression that contains at least one variable, the expression is added to the list of constraints. Here, the fixed-point computation requirement arises.
+The visitor algorithm traverses each type, taking the current variance of the visited expression as input. Every type member is in a covariant position. Conversely, each function parameter member is in a contravariant position, while the return type is in a covariant position. The position of a generic argument is determined by the variance of the generic parameter (represented as a variable in this computation). The variance of the current node within the type is computed by a `transform` function, which considers both the parent node's variance and the current node's positional variance. When a lifetime or type parameter is encountered, then, if the current variance expression is constant, the variable is updated to the new variance using the join operation with the current value. For expressions containing at least one variable, the expression is added to a list of constraints and the fixed-point computation is used.
 
 > **Example of Algorithm Execution**
 >
@@ -568,32 +568,32 @@ The visitor traverses each type with the current variance of the visited express
 >  }
 > ```
 > 
-> - Struct foo has three generic parameters, leading to 3 variables. `f0=o`, `f1=o` and `f2=o`.
-> - `x` is processed first, in the covariant position.
->  - `&'a T` is in covariant position; therefore, the variables are updated to `f0=+` and `f2=+`.
-> - `y` is processed second, in the covariant position.
->  - `Bar<T>` is in covariant position.
->      - `T` is inside a generic argument; therefore, its position is computed as a term `transform(+, b0)`.
->          - New constant `f2 = join(f2, transform(+, b0))` is added.
-> - All types are processed. Let us assume that `Bar` is an external type with variances `[-]`  Now a fixed-point computation is performed.
->  - Iteration 1:
->      - Current values are `f0=+`, `f1=o` and `f2=+`
->      - Processing constraint `f2 = join(f2, transform(+, b0))`
->      - `transform(+, b0)` where `b0=-` yields `-`
->      - `join(+, -)` yields `*`
->      - `f2` is updated, therefore, another iteration is needed.
->  - Iteration 2:
->      - Current values are `f0=+`, `f1=o` and `f2=*`
->      - Processing constraint `f2 = join(f2, transform(+, b0))`
->      - `transform(+, b0)` where `b0=-` yields `-`
->      - `join(*, -)` yields `*`
->      - `f2` is not updated, therefore, the computation is finished.
-> - The final variance is `f0=+`, `f1=o` and `f2=*`:
->  - `f0` is evident,
->  - `f1` stayed bivariant, because it was not mentioned in the type,
->  - `f2` is invariant, because it s is used in both covariant and contravariant positions.
+> - `Foo` has three generic parameters, resulting in 3 variables: `f0=o`, `f1=o`, `f2=o`.
+> - `x` is first processed in the covariant position.
+>   - `&'a T` being in the covariant position updates the variables to `f0=+` and `f2=+`.
+> - `y` is next, also in the covariant position.
+>   - `Bar<T>` being in the covariant position.
+>     - `T` inside a generic argument leads to `transform(+, b0)` for its position.
+>     - A new constant `f2 = join(f2, transform(+, b0))` is added.
+> - After processing all types and assuming `Bar` is an external type with variances `[-]`, a fixed-point computation begins.
+>   - Iteration 1:
+>     - Starting values: `f0=+`, `f1=o`, `f2=+`.
+>     - Processing constraint `f2 = join(f2, transform(+, b0))`.
+>     - `transform(+, b0)` with `b0=-` gives `-`.
+>     - `join(+, -)` results in `*`.
+>     - Update of `f2` requires another iteration.
+>   - Iteration 2:
+>     - Current values: `f0=+`, `f1=o`, `f2=*`.
+>     - Processing same constraint.
+>     - `transform(+, b0)` still yields `-`.
+>     - `join(*, -)` remains `*`.
+>     - No update to `f2`, computation concludes.
+> - Final variances: `f0=+`, `f1=o`, `f2=*`:
+>   - `f0` is evident.
+>   - `f1` remains bivariant, as it is unmentioned in the type.
+>   - `f2` is invariant due to its usage in both covariant and contravariant positions.
 
-Once all types in the crate are processed, the constraints are solved using a fixed-point computation. Note that the current crate can use generic types from other crates, and therefore, it has to export/load the variance of public types.
+After processing all types in the crate, constraints are resolved using the fixed-point computation. Note that current crates might use generic types from other crates, necessitating the export/load of variance for public types.
 
 ## Error Reporting
 
