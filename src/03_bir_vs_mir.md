@@ -29,7 +29,7 @@ pub fn fib(n: u32) -> u32 {
 \ParallelLText{
 ```
 
-## BIR (Rustc GCC)
+## BIR (Rustc GCC) 
 
 \small
 ```
