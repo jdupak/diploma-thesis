@@ -4,7 +4,7 @@
 %
 \documentclass[
   11pt,
-  twoside,symmetric]{report}
+  twoside]{report}
 \usepackage{amsmath,amssymb}
 \usepackage{iftex}
 \ifPDFTeX
@@ -210,6 +210,9 @@ Modern Roman}
   pdftitle={Memory Safety Analysis in Rust GCC},
   pdfauthor={Jakub Dupák},
   pdflang={en},
+  pdfsubject={Master's Thesis},
+  pdfkeywords={Rust, GCC, Polonius, borrow checker, static
+analysis, compiler},
   hidelinks,
   pdfcreator={LaTeX via pandoc}}
 
@@ -230,21 +233,21 @@ Modern Roman}
 
 \declaration
 
-\abstract{This thesis presents the first attempt to implement a memory safety analysis, known as the borrow checker, within the Rust GCC compiler. It utilizes the Polonius engine, which was designed as the next-generation borrow checker for rustc. The text describes the design of this analysis, the necessary modifications of the compiler, and compares the internal representations between rustc and gccrs. This comparison highlights the challenges in adapting the rustc borrow checker design to gccrs. The thesis concludes with a discussion of the results and known limitations.}{compiler, Rust, borrow checker, static analysis, GCC, Polonius}{Tato práce představuje první pokus o realizaci analýzy paměťové bezpečnosti, nazývané borrow-checker, v překladači Rust GCC. Analýza využívá systém Polonius, který je vytvořen jako nová generace borrow-checkeru pro překladač rustc. Práce popisuje návrh analýzy, úprav překladače a porovnává vnitřní reprezentaci překladačů rustc a gccrs a poukazuje na problémy při adaptaci návrhu borrow-checkeru z překladače rustc na překladač gccrs. Práci uzavírá diskusí o výsledcích a známých omezeních.}{překladač, Rust, borrow checker, statická analýza, GCC, Polonius}
+\abstract{This thesis presents the first attempt to implement a memory safety analysis, known as the borrow checker, within the Rust GCC compiler. It utilizes the Polonius engine, which was designed as the next-generation borrow checker for rustc. The text describes the design of this analysis, the necessary modifications of the compiler, and compares the internal representations between rustc and gccrs. This comparison highlights the challenges in adapting the rustc borrow checker design to gccrs. The thesis concludes with a discussion of the results and known limitations.}{compiler, Rust, borrow checker, static analysis, GCC, Polonius}{Tato práce představuje první pokus o realizaci analýzy paměťové bezpečnosti, nazývané borrow-checker, v překladači Rust GCC. Analýza využívá systém Polonius, který byl vytvořen jako nová generace borrow-checkeru pro překladač rustc. Práce popisuje návrh analýzy a úpravy překladače, porovnává vnitřní reprezentaci překladačů rustc a gccrs a poukazuje na problémy spojené s adaptací návrhu borrow-checkeru z překladače rustc na gccrs. Závěr práce je věnován diskusi o výsledcích a známých omezeních.}{překladač, Rust, borrow checker, statická analýza, GCC, Polonius}
 
 {
 \setcounter{tocdepth}{2}
 \tableofcontents
 }
 \listoffigures
-\clearpage
+\cleardoublepage
 \pagenumbering{arabic}
 
 \chapter{Introduction}\label{sec:introduction}
 
 Rust is a modern systems programming language that aims to provide
 memory safety without runtime
-overhead\citeproc{ref-Matsakis2014}{{[}1{]}}. To achieve this goal, a
+overhead{[}\citeproc{ref-Matsakis2014}{1}{]}. To achieve this goal, a
 Rust compiler has to perform a static analysis to ensure that the memory
 safety rules are not violated. This analysis is commonly called the
 \emph{borrow checker}. The borrow checker is a complex analysis that has
@@ -256,11 +259,11 @@ rustc compiler uses a new analysis engine and algorithm called
 \emph{Polonius}. The algorithm changes some fundamental views on the
 internal semantics of the analysis to allow more programs to be accepted
 and provides better error reporting for rejected
-programs\citeproc{ref-RustBelt}{{[}2{]}}. The
+programs{[}\citeproc{ref-RustBelt}{2}{]}. The
 \href{https://rust-lang.github.io/compiler-team/working-groups/polonius/}{Polonius
 Working Group} is planning to replace the current rustc borrow checker
 with one based on Polonius in the Rust language edition
-2024\citeproc{ref-poloniusupdate}{{[}3{]}}.
+2024{[}\citeproc{ref-poloniusupdate}{3}{]}.
 
 Rust GCC, also known as gccrs, is one of the emerging alternative Rust
 compilers. Unlike mrustc and rustc\_codegen\_gcc, gccrs aims to build a
@@ -271,7 +274,7 @@ LLVM) offers more target platforms and different optimizations and
 provides security plugins (originally designed for C) that could be used
 to find errors in
 \href{https://doc.rust-lang.org/reference/unsafety.html}{\emph{unsafe}}
-Rust code\citeproc{ref-eurorust}{{[}4{]}}. The goal of this thesis was
+Rust code{[}\citeproc{ref-eurorust}{4}{]}. The goal of this thesis was
 to start the development of a Polonius-based borrow checker in gccrs.
 
 The first chapter introduces the problem of borrow checking. It gives a
@@ -286,13 +289,13 @@ and describes the new intermediate representation and its usage in the
 analysis. Later sections of the chapter describe other modifications of
 the rest of the compiler necessary to support borrow checking. The final
 chapter elaborates on the implementation, its development, the current
-state and the known missing features and limitations.
+state, and the known missing features and limitations.
 
 \chapter{The Problem of Borrow
 Checking}\label{sec:the-problem-of-borrow-checking}
 
 This section introduces the concept of borrow checking and traces its
-development within the Rust programming language. It presents the simple
+development within the Rust programming language. It presents a simple
 lexical approach, followed by an explanation of a more advanced
 control-flow sensitive analysis and an introduction to the Polonius
 analysis engine, the latest approach to borrow checking in Rust. Since
@@ -300,16 +303,16 @@ this work utilizes the Polonius engine, it is described in more detail
 in the following chapter.
 
 Typical programming language implementations manage memory with dynamic
-storage duration in one of two ways\footnote{Dynamic storage duration
-  means that it is unknown at compile time when storage can be safely
-  reclaimed. In contrast, memory with static storage duration is
-  reclaimed at the end of the program, and memory with automatic storage
-  duration is bound to a function call.}. Languages like C employ manual
+storage duration\footnote{Dynamic storage duration means that it is
+  unknown at compile time when storage can be safely reclaimed. In
+  contrast, memory with static storage duration is reclaimed at the end
+  of the program, and memory with automatic storage duration is bound to
+  a function call.} in one of two ways. Languages like C employ manual
 memory management, where programmers explicitly allocate and free
-memory, a method prone to errors\citeproc{ref-nsa}{{[}5{]}}. In
-contrast, higher-level languages such as Java and Python use automatic
-memory management, where runtime garbage collectors handle memory
-management tasks.
+memory, a method prone to errors{[}\citeproc{ref-nsa}{5}{]}. In
+contrast, higher-level languages such as Java and Python employ
+automatic memory management, where runtime garbage collectors handle
+memory management tasks.
 
 Addressing the pitfalls of manual memory management, languages like C++
 and \href{https://ziglang.org/}{Zig} have introduced tools for more
@@ -321,15 +324,15 @@ and \href{https://ziglang.org/documentation/master/\#defer}{defer
 statements}. Here, the key difference from stack allocation is that the
 ownership can be dynamically transferred between objects. In more
 complex situations, where multiple objects share memory and deallocation
-is tied to the last object's destruction, these languages opt-in for
+is tied to the last object's destruction, these languages opt in for
 runtime solutions like
 \href{https://en.wikipedia.org/wiki/Reference_counting}{reference
 counting}.
 
 Despite these improvements, two serious problems remain. First,
-programmers can incorrectly establish and maintain ownership binds,
+programmers can incorrectly establish and maintain the ownership ties,
 especially during dynamic ownership transfers between objects. This
-issue can very often occur when interfacing systems with differing
+problem can very often occur when interfacing systems with differing
 memory management models\footnote{An interface between a C++ application
   with
   \href{https://www.cppreference.com/Cpp_STL_ReferenceManual.pdf}{STL-based}
@@ -337,14 +340,14 @@ memory management models\footnote{An interface between a C++ application
   where all Qt API methods take raw pointers (as opposed to smart
   pointers). Some of those methods assume that the ownership is
   transferred, and some of them do not. These methods can only be
-  differentiated using their documentation.}. Second, issue appears when
-the ownership is not transferred, but a copy of the pointer is used
+  differentiated using their documentation.}. The second issue appears
+when the ownership is not transferred, but a copy of the pointer is used
 temporarily (this is called \emph{borrowing} in Rust). The assumption
 that the owning object will exist for the whole time this copy is used
 is often wrong. This kind of mistake is called a \emph{dangling
-pointer}.\citeproc{ref-danglingpointer}{{[}6{]}}.
+pointer}.{[}\citeproc{ref-danglingpointer}{6}{]}
 
-Rust's memory safety strategy builds upon the RAII approach, but it
+Rust's memory safety strategy builds upon the RAII approach, but
 introduces a built-in static analysis, known as the borrow checker, to
 prevent the above-mentioned memory errors. To make the analysis
 feasible, Rust allows only a conservative subset of memory-safe
@@ -357,11 +360,12 @@ programmer.
 
 The key idea behind Rust's approach is the strict differentiation
 between ownership transfers and borrowing, achieved through its type
-system. An ownership transfer, called ``move'' in Rust (and C++), binds
-owned unique resources to another object, detaching them from the
+system. An ownership transfer, called \emph{move} in Rust (and C++),
+binds owned unique resources to another object, detaching them from the
 current object. Rust simplifies this operation to a mere bitwise copy by
-restricting objects from storing a reference to itself. It also ensures
-the original object cannot be used after the move operation.
+restricting objects from storing a reference to itself, avoiding the
+complications seen in C++. It also ensures that the original object
+cannot be used after the move operation.
 
 For borrows, Rust uses static analysis to ensure that any borrowed
 object is not deallocated during its use, requiring the borrowed object
@@ -371,22 +375,22 @@ formally describe the relationships of borrows within function inputs
 and outputs using so-called \emph{lifetimes}. Lifetimes are a special
 kind of type parameter that can be used to describe a part of program
 where concerned references must be valid. One can image a lifetime as an
-inference variables, for which the compiler has to find a valid value (a
+inference variable, for which the compiler has to find a valid value (a
 subset of the program). Lifetime annotations are related using
 \emph{outlives} relationships, indicating that one reference's lifetime
 is a subset of another.
 
 Throughout Rust's borrow checking development, the interpretation of
-\emph{a subset of the program} has evolved. Initially it was based on
-expressions, then control flow graph (CFG) points, and later potentially
-used borrows.
+\emph{a subset of the program} has evolved. Initially, it was based on
+expressions and statements, then control flow graph (CFG) points, and
+later potentially used borrows.
 
 \begin{quote}
-\textbf{Example}: Consider a vector-like structure storing references to
-integers without owning them. We introduce a lifetime parameter
-\texttt{\textquotesingle{}a} to represent the parts of the program where
-the vector must be valid, substituted with a concrete lifetime at each
-use site.
+\textbf{Example}: Consider a vector-like structure that stores
+references to integers without owning them. We introduce a lifetime
+parameter \texttt{\textquotesingle{}a} to represent the parts of the
+program where the vector must be valid. The parameter is substituted
+with a concrete lifetime at each use site.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -415,20 +419,20 @@ as the vector exists.
 \section{The Evolution of Borrow Checking in Rustc}\label{sec:evolution}
 
 This section describes how the analysis evolved, gradually rejecting
-less memory-safe programs. Rustc started with lexical (scope-based
-analysis), followed by the first non-lexical (CFG-based) analysis, which
+less memory-safe programs. Rustc started with a lexical (scope-based)
+analysis, followed by the first non-lexical (CFG-based) analysis, which
 is being extended by the Polonius project. This section strongly builds
-upon RFC 2094\citeproc{ref-rfc2094nll}{{[}7{]}}, which introduced
+upon RFC 2094{[}\citeproc{ref-rfc2094nll}{7}{]}, which introduced
 non-lexical borrow checking to Rust. Examples from the RFC are presented
 in this section.
 
 The simplest variant of borrow checker is based on stack variable
-scopes. A reference is valid from the point in the program (here in
-terms of statements and expressions) where it is created until the end
-of the current scope. This approach can be extended to handle some
-common programming patterns as special cases. For example, when a
-reference is created in function parameters, it is valid until the end
-of the function call.
+scopes. A reference is valid from the point in the program, in terms of
+statements and expressions, where it is created until the end of the
+current scope. This approach can be extended to handle some common
+programming patterns as special cases. For example, when a reference is
+created in function parameters, it is valid until the end of the
+function call.
 
 \begin{quote}
 \begin{Shaded}
@@ -492,12 +496,12 @@ advanced cases.
 One of those more advanced cases occurs when lifetimes are not symmetric
 in conditional branches. A typical case is where a condition checks the
 presence of a value. In the positive branch, we have a reference to a
-value which is a part of the \texttt{map}, but in the negative branch,
-we do not. Therefore, it is safe to create a new reference in the
-negative branch. By \emph{safe}, we mean that there will be only one
-reference pointing to the \texttt{map} object at any time. A convenient
-way to describe \emph{at any time} is to use the control flow graph
-(CFG) of the program.
+value that is part of the \texttt{map}, but in the negative branch, we
+do not. Therefore, it is safe to create a new reference in the negative
+branch. By \emph{safe}, we mean that there will be only one reference
+pointing to the \texttt{map} object at any time. A convenient way to
+describe \emph{at any time} is to use the control flow graph (CFG) of
+the program.
 
 \begin{quote}
 \begin{Shaded}
@@ -515,15 +519,15 @@ way to describe \emph{at any time} is to use the control flow graph
 \end{Shaded}
 \end{quote}
 
-For more examples, see RFC 2094\citeproc{ref-rfc2094nll}{{[}7{]}}.
+For more examples, see RFC 2094{[}\citeproc{ref-rfc2094nll}{7}{]}.
 However, the provided examples should be sufficient to demonstrate that
-analyzing the program on a control flow graph (CFG) instead of the
+analyzing the program on the control flow graph (CFG) instead of the
 syntactic structure (AST) enables the borrow checker to validate and
 ensure the safety of complex programs that were previously rejected.
 
 The above analysis thinks of lifetimes as regions (set of points in CFG)
 where the reference is valid. The goal of the analysis is to find the
-smallest regions so that the reference is not required to be valid
+smallest regions such that the reference is not required to be valid
 outside of those regions. The smaller the regions, the more references
 can coexist at the same time, allowing more programs to be accepted.
 This approach is called NLL (non-lexical lifetimes) in rustc.
@@ -531,19 +535,17 @@ This approach is called NLL (non-lexical lifetimes) in rustc.
 The next generation of borrow checker in Rust is based on the Polonius
 analysis engine. Polonius is an extension of NLL, which is capable of
 proving more programs to be safe by using a different interpretation of
-lifetimes.
-
-Unlike NLL, Polonius can handle the last example. In this scenario the
-problem is that everything that is tied to external lifetimes
-(\texttt{\textquotesingle{}a}) has to be valid for the whole function.
-Since \texttt{v} is returned, it has to outlive the lifetime
+lifetimes. Unlike NLL, Polonius can handle the last example. In this
+scenario, the problem is that everything that is tied to external
+lifetimes (\texttt{\textquotesingle{}a}) has to be valid for the whole
+function. Since \texttt{v} is returned, it has to outlive the lifetime
 \texttt{\textquotesingle{}a}. However, the lifetime of \texttt{v} is
 bound to the lifetime of the reference to the hashmap it is stored in.
 It forces the \texttt{map} to be borrowed (transitively) for at least
 the whole function. This includes the \texttt{map.insert} call, which
 needs to borrow the hashmap itself, resulting in an error. However, we
 can clearly see that no reference to \texttt{map} is available in the
-\texttt{None} branch. Here Polonius can help.
+\texttt{None} branch. Here, Polonius can help.
 
 Instead of starting with references and figuring out where they need to
 be valid, Polonius goes in the other direction and tracks what
@@ -552,8 +554,9 @@ determined in the example above, there is no preexisting reference to
 the \texttt{map} in the \texttt{None} branch.
 
 It is important to note that only internal computations inside the
-compiler are changed by this. This change does not affect the language
-semantics. It only removes some limitations of the compiler.
+compiler are changed by this shift of meaning. This change does not
+affect the language semantics. It only removes some limitations of the
+compiler.
 
 Another significant contribution of the Polonius project is the fact
 that it replaces many handwritten checks with formal logical rules.
@@ -565,7 +568,7 @@ to provide better error messages.
 The Polonius engine was created by
 \href{https://github.com/nikomatsakis}{Niko Matsakis} and extended by
 \href{https://github.com/lqd/}{Rémy Rakic} and Albin
-Stjerna\citeproc{ref-Stjerna2020}{{[}8{]}} as a next-generation
+Stjerna{[}\citeproc{ref-Stjerna2020}{8}{]} as a next-generation
 control-flow sensitive borrow checking analysis for rustc. It was
 designed as an independent library that can be used both by the rustc
 compiler and by different research projects, making it suitable for
@@ -578,7 +581,7 @@ where each fact is represented by a tuple of integers\footnote{\texttt{usize}}
 compiler internals.
 
 In the previous chapter, we mentioned that Polonius differs from NLL in
-its interpretation of lifetimes. Polonius uses the term ``Origin'' to
+its interpretation of lifetimes. Polonius uses the term \emph{origin} to
 better describe the concept. An origin is a set of loans that can be
 referenced using a variable at each CFG point. In other words, it tracks
 where the references that are used could have originated.
@@ -601,12 +604,12 @@ task of the analysis to compute it.
 \end{quote}
 
 Polonius begins by processing the input facts, computing transitive
-closures of relationships and analyzing variable initializations and
-deinitializations across the CFG. It then proceeds to identify move
-errors, where the ownership of an object is erroneously transferred
-multiple times. In the next step, it calculates the liveness of
-variables and the ``outlives'' graph (transitive constraints of
-lifetimes at each CFG point)\citeproc{ref-polonius2}{{[}9{]}}. All
+closures of relationships, and analyzing variable initializations and
+deinitializations across the CFG. Subsequently, it identifies move
+errors, which occur when an object's ownership is erroneously
+transferred multiple times. In the next step, it calculates the liveness
+of variables and the ``outlives'' graph (transitive constraints of
+lifetimes at each CFG point){[}\citeproc{ref-polonius2}{9}{]}. All
 origins that appear in the type of live variable are considered live.
 
 The engine next determines \emph{active loans} based on two criteria:
@@ -623,9 +626,9 @@ invalidates the loan.
 
 \begin{figure}
 \centering
-\includesvg[width=0.77\textwidth,height=\textheight]{polonius.svg}
+\includesvg[width=0.8\textwidth,height=\textheight]{polonius.svg}
 \caption{Illustration of steps performed by Polonius to detect errors.
-(Adapted from \citeproc{ref-Stjerna2020}{{[}8{]}}.)}
+(Adapted from {[}\citeproc{ref-Stjerna2020}{8}{]}.)}
 \end{figure}
 
 \section{Polonius Facts}\label{sec:polonius-facts}
@@ -634,7 +637,7 @@ This section outlines the facts that Polonius utilizes, offering a
 better idea of the work that the compiler needs to do. These facts are
 categorized and briefly explained. For an exhaustive list, refer to the
 \href{https://github.com/rust-lang/polonius/blob/master/polonius-engine/src/facts.rs}{Polonius
-source code} and the Polonius Book\citeproc{ref-polonius}{{[}10{]}}.
+source code} and the Polonius Book{[}\citeproc{ref-polonius}{10}{]}.
 
 \begin{itemize}
 \tightlist
@@ -654,7 +657,7 @@ source code} and the Polonius Book\citeproc{ref-polonius}{{[}10{]}}.
     variable at each CFG point. It is the interpretation of lifetimes
     used by Polonius.
   \item
-    \texttt{Loan} is a result of a borrow expression.
+    \texttt{Loan} is the result of a borrow expression.
   \end{itemize}
 \item
   Control Flow Graph:
@@ -671,11 +674,11 @@ source code} and the Polonius Book\citeproc{ref-polonius}{{[}10{]}}.
   \begin{itemize}
   \tightlist
   \item
-    \texttt{var\_used\_at:\ (Variable,\ Point)} marks locations a
+    \texttt{var\_used\_at:\ (Variable,\ Point)} marks locations where a
     variable is used in any way except for being dropped (destructed).
   \item
     \texttt{var\_defined\_at:\ (Variable,\ Point)} marks the beginning
-    of a variable's scope or its reassignment. All facts related to
+    of a variable scope or its reassignment. All facts related to the
     given variable are reset at this point.
   \item
     \texttt{var\_dropped\_at:\ (Variable,\ Point)} indicates a point
@@ -725,7 +728,7 @@ source code} and the Polonius Book\citeproc{ref-polonius}{{[}10{]}}.
     (outlives) relationships.
   \item
     \texttt{placeholder:\ (Origin,\ Loan)} associates a universal origin
-    with a loan that happened outside the function.
+    with a loan that occurred outside the function.
   \end{itemize}
 \item
   Loan Facts:
@@ -749,7 +752,7 @@ Representations}\label{sec:comparison-of-internal-representations}
 
 Executing a borrow checker with an external analysis engine involves two
 key steps. The first is collecting relevant program information,
-referred to as \emph{facts}. The second step is evaluation of these
+referred to as \emph{facts}. The second step is the evaluation of these
 facts using the external engine. Before we can discuss the
 \emph{collection} of facts, we need a clear understanding of how
 programs are represented inside the compiler. We will use the term
@@ -760,6 +763,15 @@ will help us understand the challenges of adapting the borrow checker
 design from rustc to gccrs. First, we will describe the IRs used by
 rustc and then compare them with those used in gccrs.
 
+\vskip 5mm
+
+\begin{figure}
+\centering
+\includesvg[width=0.8\textwidth,height=\textheight]{./pipeline.svg}
+\caption{Comparison of compiler pipelines with a focus on internal
+representations}
+\end{figure}
+
 \section{GCC and LLVM}\label{sec:gcc-and-llvm}
 
 To understand the differences between each of the compilers, we must
@@ -768,19 +780,20 @@ they are built (GCC and LLVM). We will only focus on the middle-end of
 each platform, since the back-end does not directly influence the
 front-end development.
 
-LLVM is built around a three-address code (3-AD)\footnote{Three-address
-  code represents a program as sequences of statements (known as
-  \emph{basic blocks}), connected by control flow instructions to form a
-  control flow graph (CFG).} representation known as the \emph{LLVM
-intermediate representation} (LLVM IR)\citeproc{ref-llvm}{{[}11{]}}.
-This IR serves as an interface between the front-ends and the LLVM
-platform. Each front-end is responsible for transforming its custom AST
-IR\footnote{The abstract syntax tree (AST) is a structure representing
-  the program's syntax. It is the direct result of parsing. For
-  instance, an expression \texttt{1\ +\ (2\ -\ 7)} would be represented
-  as a \texttt{subtraction} node, with children representing \texttt{1}
-  and the subexpression \texttt{(2\ -\ 7)}.} into the LLVM IR. The LLVM
-IR is stable and strictly separated from the front-end; therefore, it
+LLVM is built around a three-address code (3-AD)\footnote{The
+  three-address code represents a program as sequences of statements
+  (known as \emph{basic blocks}), connected by control flow instructions
+  to form a control flow graph (CFG).} representation known as the
+\emph{LLVM intermediate representation} (LLVM
+IR){[}\citeproc{ref-llvm}{11}{]}. This IR serves as an interface between
+the front-ends and the LLVM platform. Each front-end is responsible for
+transforming its custom AST IR\footnote{The abstract syntax tree (AST)
+  is a structure representing the program syntax. It is the direct
+  result of parsing. For instance, an expression
+  \texttt{1\ +\ (2\ -\ 7)} would be represented as a
+  \texttt{subtraction} node, with children representing \texttt{1} and
+  the subexpression \texttt{(2\ -\ 7)}.} into the LLVM IR. The LLVM IR
+is stable and strictly separated from the front-end; therefore, it
 cannot be easily extended to include language-specific constructs.
 
 \begin{figure}
@@ -790,19 +803,19 @@ cannot be easily extended to include language-specific constructs.
 \end{figure}
 
 GCC, in contrast, uses a tree-based representation called
-GENERIC\citeproc{ref-gccint}{{[}12, p. 175{]}} for interfacing with
+GENERIC{[}\citeproc{ref-gccint}{12, p.~175}{]} for interfacing with
 front-ends. GENERIC was created as a generalized form of AST shared by
 most front-ends. GCC provides a set of common tree nodes to describe all
 the standard language constructs in the GENERIC IR. Front-ends may
 define language-specific constructs and provide hooks for their
-handling.\citeproc{ref-gccint}{{[}12, p. 212{]}} The GENERIC
+handling.{[}\citeproc{ref-gccint}{12, p.~212}{]} The GENERIC
 representation is subsequently transformed into GIMPLE, which is
 mostly\footnote{``GIMPLE that is not fully lowered is known as `High
   GIMPLE' and consists of the IL before the \texttt{pass\_lower\_cf}.
   High GIMPLE contains some container statements such as lexical scopes
   and nested expressions, while ``Low GIMPLE'' exposes all of the
   implicit jumps for control and exception expressions directly in the
-  IL and EH region trees.''\citeproc{ref-gccint}{{[}12, p. 225{]}}} a
+  IL and EH region trees.''{[}\citeproc{ref-gccint}{12, p.~225}{]}} a
 3-AD representation. This transformation involves decomposing
 expressions into a series of statements and introducing temporary
 variables. This transformation is done inside the compiler platform, not
@@ -810,8 +823,8 @@ in the front-end. This approach makes the front-ends smaller and shifts
 more work into the shared part. The GIMPLE representation does not
 contain information specific to each front-end (programming language).
 However, it is possible to store language-specific information in GIMPLE
-by adding entirely new statements.\citeproc{ref-gccint}{{[}12, p.
-262{]}} This is possible because GIMPLE is not a stable interface.
+by adding entirely new statements.{[}\citeproc{ref-gccint}{12,
+p.~262}{]} This is possible because GIMPLE is not a stable interface.
 
 The key takeaway from this section is that rustc has to transform the
 tree-based representation into a 3-AD representation by itself. That
@@ -832,26 +845,6 @@ representation (HIR). For transformation into a middle-level
 intermediate representation (MIR), the HIR is first transformed into a
 typed HIR (THIR). The MIR is then transformed into the LLVM IR.
 
-\begin{figure}
-\centering
-\includesvg[width=0.75\textwidth,height=\textheight]{./pipeline.svg}
-\caption{Comparison of compiler pipelines with a focus on internal
-representations}
-\end{figure}
-
-AST is a tree-based representation of the program, closely following
-each source code token. At this stage, rustc performs macro-expansion
-and a partial name resolution (macros and imports)
-\citeproc{ref-devguide}{{[}13{]}} \footnote{\url{https://rustc-dev-guide.rust-lang.org/macro-expansion.html}}
-\footnote{\url{https://rustc-dev-uide.rust-lang.org/name-resolution.html}}.
-As the AST is lowered to HIR, some complex language constructs are
-desugared to simpler constructs. For example, various types of loops are
-transformed into a single infinite loop construct (Rust \texttt{loop}
-keyword), and many structures that can perform pattern matching
-(\texttt{if\ let}, \texttt{while\ let}, \texttt{?} operator) are
-transformed into the `match``
-construct\citeproc{ref-reference}{{[}14{]}} \footnote{\url{https://doc.rust-lang.org/reference/expressions/if-expr.html\#if-let-expressions}}.
-
 \begin{quote}
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -863,9 +856,21 @@ construct\citeproc{ref-reference}{{[}14{]}} \footnote{\url{https://doc.rust-lang
 \end{Highlighting}
 \end{Shaded}
 
-\textbf{Example:} This simple code snippet will serve as our example
-through this section.
+\textbf{Example:} This code snippet will serve us as example throughout
+this section.
 \end{quote}
+
+AST is a tree-based representation of the program, closely following
+each source code token. At this stage, rustc performs macro-expansion
+and a partial name resolution (macros \footnote{\url{https://rustc-dev-guide.rust-lang.org/macro-expansion.html}}
+and imports\footnote{\url{https://rustc-dev-uide.rust-lang.org/name-resolution.html}})
+{[}\citeproc{ref-devguide}{13}{]}. As the AST is lowered to HIR, some
+complex language constructs are desugared to simpler constructs. For
+example, various types of loops are transformed into a single infinite
+loop construct (Rust \texttt{loop} keyword), and many structures that
+can perform pattern matching (\texttt{if\ let}, \texttt{while\ let},
+\texttt{?} operator) are transformed into the `match``
+construct{[}\citeproc{ref-reference}{14} \footnote{\url{https://doc.rust-lang.org/reference/expressions/if-expr.html\#if-let-expressions}}{]}.
 
 \begin{quote}
 \begin{Shaded}
@@ -874,22 +879,17 @@ through this section.
 \NormalTok{  generics: Generics \{ ... \},}
 \NormalTok{  sig: FnSig \{}
 \NormalTok{    header: FnHeader \{ ... \},}
-\NormalTok{      decl: FnDecl \{}
-\NormalTok{        inputs: [}
-\NormalTok{          Param \{}
-\NormalTok{            ty: Ty \{}
-\NormalTok{              Path \{ segments: [ PathSegment \{ ident: i32\#0 \} ] \}}
-\NormalTok{            \}}
-\NormalTok{            pat: Pat \{ Ident(x\#0) \}}
-\NormalTok{          \},}
-\NormalTok{        ],}
-\NormalTok{        output: Ty \{}
-\NormalTok{            Path \{ segments: [ PathSegment \{ ident: Foo\#0 \} ]}
-\NormalTok{        \}}
-\NormalTok{      \},}
-\NormalTok{  \},}
+\NormalTok{    decl: FnDecl \{}
+\NormalTok{      inputs: [}
+\NormalTok{        Param \{}
+\NormalTok{          ty: Ty \{ }
+\NormalTok{            Path \{ segments: [ PathSegment \{ ident: i32\#0 \} ] \}}
+\NormalTok{          \}}
+\NormalTok{          pat: Pat \{ Ident(x\#0) \}}
+\NormalTok{        \},}
+\NormalTok{      ],}
+\NormalTok{      output: Ty \{ Path \{ segments: [ PathSegment \{ ident: Foo\#0 \} ] \}}
 \NormalTok{  ... }
-\NormalTok{\}}
 \end{Highlighting}
 \end{Shaded}
 
@@ -899,14 +899,14 @@ program. The full version can be found in the
 \hyperref[abstract-syntax-tree-ast]{appendix}.
 \end{quote}
 
-The HIR is rustc primary representation, and it is used for most
-operations\citeproc{ref-devguide}{{[}13{]}}, HIR It combines a
+The HIR is rustc's primary representation, and it is used for most
+operations{[}\citeproc{ref-devguide}{13}, HIR{]} It combines a
 simplified AST with additional tables for quick access to additional
 information, such as expression and statement types. These tables are
 used for analysis passes, including full name resolution and type
-checking. Type checking includes verification type correctness,
+checking. Type checking includes verification of type correctness,
 inference, and resolving of implicit type-dependent
-constructs\citeproc{ref-devguide}{{[}13{]}} \footnote{\url{https://rustc-dev-guide.rust-lang.org/type-checking.html}}.
+constructs{[}\citeproc{ref-devguide}{13} \footnote{\url{https://rustc-dev-guide.rust-lang.org/type-checking.html}}{]}.
 
 \begin{quote}
 \begin{Shaded}
@@ -1002,7 +1002,7 @@ place.
 \end{Shaded}
 
 \textbf{Example:} MIR dump For further details, see the chapter ``Source
-Code Representation'' in \citeproc{ref-devguide}{{[}13{]}}.
+Code Representation'' in {[}\citeproc{ref-devguide}{13}{]}.
 \end{quote}
 
 \section{Rust GCC Representation}\label{sec:rust-gcc-representation}
@@ -1032,7 +1032,7 @@ There are no THIR and MIR or any equivalent in gccrs. MIR cannot be used
 in GCC unless the whole gccrs code generation is rewritten to output
 (low) GIMPLE instead of GENERIC, which would be much more complex than
 the current approach. Given the limited development resources of gccrs,
-this is not a viable option.\citeproc{ref-zulip}{{[}15{]}}
+this is not a viable option.{[}\citeproc{ref-zulip}{15}{]}
 
 The TyTy-type representation is simplified in gccrs and provides no
 uniqueness guarantees. There is a notable difference in the
@@ -1049,17 +1049,18 @@ Design}\label{sec:rust-gcc-borrow-checker-design}
 
 The Rust GCC borrow checker is designed to closely resemble the rustc
 borrow checker, within the constraints of the Rust GCC. This approach
-allows us to leverage existing knowledge of borrow checking in Rust. The
-analysis operates in two phases. First, it gathers relevant information,
-called \emph{facts}, about the program, stored as tuples of numbers.
-Each number represents a CFG node, variable, path/place, or loan (a
-borrow expression). Then, the borrow checker submits these facts to the
-analysis engine, which computes the analysis results. The compiler
-receives the facts related to memory safety violations and translates
-them into error messages. A significant aspect of the Rust GCC borrow
-checker is its reuse of the analysis engine from rustc. To integrate the
-Polonius engine, developed in Rust, into the gccrs compiler, which is
-C++-based, we utilize the C ABI and a thin Rust wrapper.
+allows us to leverage the existing knowledge of borrow checking in Rust.
+The analysis operates in two phases. First, it gathers relevant
+information, called \emph{facts}, about the program, stored as tuples of
+numbers. Each number represents a CFG node, variable, path/place, or
+loan (a borrow expression). The borrow checker then submits these facts
+to the analysis engine, which computes the analysis results. The
+compiler receives the facts related to memory safety violations and
+translates them into error messages. A significant aspect of the Rust
+GCC borrow checker is its reuse of the analysis engine from rustc. To
+integrate the Polonius engine, developed in Rust, into the gccrs
+compiler, which is C++-based, we utilize the C ABI and a thin Rust
+wrapper.
 
 This chapter details the design process of the gccrs borrow checker, the
 decisions made during this process, and the final design. It places
@@ -1103,8 +1104,8 @@ need to be preserved by the middle-end passes until the pass building
 the CFG (which includes 11 passes), after which facts could be
 collected. After that, the facts would need to be discarded to avoid
 complicating the tens of subsequent
-passes\footnote{See file \texttt{gcc/passes.def} in the GCC source code.}\citeproc{ref-gccint}{{[}12,
-p. 141{]}}, and RTL generation. This approach was discussed with senior
+passes\footnote{See file \texttt{gcc/passes.def} in the GCC source code.}{[}\citeproc{ref-gccint}{12,
+p.~141}{]}, and RTL generation. This approach was discussed with senior
 GCC developers and quickly rejected as it would require a large amount
 of work and leak front-end-specific information into the middle-end,
 making it more complex. No attempt was made to experiment with this
@@ -1154,7 +1155,7 @@ no additions or modifications are needed). It was agreed that such
 transformations are useful and should be implemented regardless of the
 path taken by the borrow checker. Those transformations include mainly
 loops and pattern-matching structures. These transformations are even
-documented in the rust reference\citeproc{ref-reference}{{[}14{]}}.
+documented in the rust reference{[}\citeproc{ref-reference}{14}{]}.
 
 \begin{quote}
 At the time of writing, desugaring of the for loop was implemented by
@@ -1178,7 +1179,7 @@ generation. The main problem with this approach is that it would require
 a large portion of gccrs to be reimplemented, delaying the project by a
 considerable amount of time. Should such an approach be taken, any
 effort on borrow checking would be delayed until the MIR is implemented.
-The maintainers\citeproc{ref-zulip}{{[}15{]}} decided that such an
+The maintainers{[}\citeproc{ref-zulip}{15}{]} decided that such an
 approach is not feasible and that gccrs will not use MIR in any
 foreseeable future.
 
@@ -1187,7 +1188,7 @@ experiment with a different, minimalistic approach: building a radically
 simplified MIR-like IR that keeps only the bare minimum of information
 needed for borrow checking. Given the unexpected productivity of this
 approach, it was decided to continue. This IR, later called the borrow
-checker IR (BIR), focuses only on the flow of data, and ignores the
+checker IR (BIR), focuses only on the flow of data and ignores the
 actual data transformations. The main disadvantage of this approach is
 that it creates a dead branch of the compilation pipeline that is not
 used for code generation, and therefore it is not covered by the
@@ -1208,7 +1209,7 @@ described in the next section.
 Process}\label{sec:the-borrow-checking-process}
 
 Before the borrow checking itself can be performed, specific information
-about types needs to be collected when the HIR is type-checked and TyTy
+about types needs to be collected when the HIR is type checked and TyTy
 types are created. The TyTy needs to resolve and store information about
 lifetimes and their corresponding constraints. At this point, lifetimes
 are resolved from string names, and their bounding clauses are found.
@@ -1247,7 +1248,7 @@ universal\footnote{There are two kinds of lifetimes in Rust semantics:
   existential lifetimes. That means that the code has to be valid
   \emph{for some} set of \emph{loans} (or CFG points).} lifetime
 annotation (\texttt{\textquotesingle{}a}), elided universal lifetime
-annotation\href{https://doc.rust-lang.org/reference/lifetime-elision.html}{\citeproc{ref-reference}{{[}14{]}}},
+annotation\href{https://doc.rust-lang.org/reference/lifetime-elision.html}{{[}\citeproc{ref-reference}{14}{]}},
 and local/existential lifetimes, which are always inferred. In contrast,
 \emph{region}/\emph{origin} is used to refer to the semantic object. The
 object is, in fact, an inference variable, and its value is computed by
@@ -1280,8 +1281,8 @@ Inside TyTy, lifetimes are represented in the following ways. Named
 lifetimes are enumerated. Anonymous lifetimes are assumed to be always
 distinct (but they are represented by an identical object at this
 stage). Early bound lifetimes are represented by the relative position
-of the lifetime parameter to which they are bound. In generic types, the
-lifetime arguments are stored together with the type arguments, which
+of the lifetime parameter to which they are bound. In generic types,
+lifetime arguments are stored together with type arguments, which
 ensures their automatic propagation. An issue arising from this
 automatic propagation is the updating of the bindings of early bound
 lifetimes. This means that by a simple inspection of the body of the
@@ -1302,9 +1303,10 @@ looked up in the current type.
 The Borrow Checker Intermediate Representation (BIR) is a three-address
 code representation, designed to closely resemble a subset of rustc
 Mid-level Intermediate Representation (MIR). Like MIR, it represents the
-body of a single function (or function-like item, such as a closure), as
-borrow checking is performed on each function separately. It abstracts
-specific operations into a few key operations that focus on data flow.
+body of a single function (or a function-like item, such as a closure),
+as borrow checking is performed on each function separately. It
+abstracts specific operations into a few key operations that focus on
+data flow.
 
 \begin{quote}
 \begin{Shaded}
@@ -1344,7 +1346,7 @@ specific operations into a few key operations that focus on data flow.
 
 \textbf{Example:} The following example shows a shortened BIR dump of a
 simple Rust program computing the nth Fibonacci number. The complete
-source code and full dump are available in appendix
+source code and the full dump are available in the appendix
 \ref{sec:comparison-of-bir-and-mir}.
 \end{quote}
 
@@ -1474,7 +1476,7 @@ regions\footnote{In this text, we use the term lifetime for the
 number of lifetimes to be generated involves traversing the type
 structure. For generic types, the inner structure is ignored and only
 the lifetime and type parameters are considered. Note that the type
-parameters can be also generic, creating a structure known as
+parameters can also be generic, creating a structure known as
 \href{https://rustc-dev-guide.rust-lang.org/what-does-early-late-bound-mean.html\#early-and-late-bound-parameter-definitions}{higher-kinded}.
 All types are independently queried for each node from the HIR, instead
 of being derived within the BIR.
@@ -1506,11 +1508,11 @@ therefore, easier for manual comparison.
 Checking}\label{sec:bir-fact-collection-and-checking}
 
 The BIR fact collection process extracts Polonius facts from the BIR and
-conducts additional checks. Polonius is responsible for verifying
-lifetime (region) constraints, ensuring each place is moved at most
+performs additional checks. Polonius is responsible for verifying
+lifetime (region) constraints, ensuring that each place is moved at most
 once, and checking that illegal accesses are not made to borrow memory
 locations. The collection process involves two phases: gathering static
-facts from the place database and universal region constraints, and
+facts from the place database and universal region constraints and
 traversing the BIR along the CFG to collect dynamic facts.
 
 The fact collection is performed in two phases. First, static facts are
@@ -1535,7 +1537,7 @@ within the type. (See Variance Analysis below.)
 \end{Shaded}
 
 Formal definition of paths from the Polonius
-book\citeproc{ref-polonius}{{[}10{]}}.
+book{[}\citeproc{ref-polonius}{10}{]}.
 \end{quote}
 
 In the second phase, the BIR is traversed along the CFG, and dynamic
@@ -1595,7 +1597,7 @@ each other in terms of loans or CFG points
 subtyping on the inner parameter is called variance.
 
 \begin{quote}
-\textbf{Definition} \citeproc{ref-reference}{{[}14{]}}
+\textbf{Definition} {[}\citeproc{ref-reference}{14}{]}
 
 \texttt{F\textless{}T\textgreater{}} is covariant over \texttt{T} if
 \texttt{T} being a subtype of \texttt{U} implies that
@@ -1615,12 +1617,11 @@ reference type \texttt{\&\textquotesingle{}a\ T}, the lifetime parameter
 \texttt{\textquotesingle{}a} is covariant. This implies that a reference
 \texttt{\&\textquotesingle{}a\ T} can be safely coerced into
 \texttt{\&\textquotesingle{}b\ T} if \texttt{\textquotesingle{}a} is a
-subtype of \texttt{\textquotesingle{}b}. In practical terms, if it's
+subtype of \texttt{\textquotesingle{}b}. In practical terms, if it is
 safe to dereference a reference at any point during the period
 \texttt{\textquotesingle{}a}, it remains safe throughout the shorter
 period \texttt{\textquotesingle{}b}, given \texttt{\textquotesingle{}b}
-is a subset of \texttt{\textquotesingle{}a} \footnote{A subset of CFG
-  nodes.}.
+is a subset of \texttt{\textquotesingle{}a}.
 
 The situation is different when we pass a reference to a function as an
 argument. In that case, the lifetime parameter is contravariant. For
@@ -1631,8 +1632,8 @@ type
 can be coerced into
 \texttt{fn\ foo\textless{}\textquotesingle{}b\textgreater{}(x:\ \&\textquotesingle{}b\ T)}
 if \texttt{\textquotesingle{}b:\ \textquotesingle{}a}. Such a
-transformation is safe as it narrows the range of acceptable argument
-values for the parameter \texttt{x}.
+transformation is safe because it narrows the range of acceptable
+argument values for the parameter \texttt{x}.
 
 To visualize this concept, consider the following code snippet, where
 \texttt{\textquotesingle{}a} denotes a region safe for referencing the
@@ -1671,23 +1672,23 @@ subject to different approaches.
 \subsection{Variance of Generic
 Types}\label{sec:variance-of-generic-types}
 
-Generic type variance can be derived from either the type's usage or its
-definition\citeproc{ref-Altidor2011}{{[}16{]}}. Rustc employs
-definition-site variance for generic types, meaning variance is computed
-from the type's definition, rather than its usage in functions. The
-situation becomes complicated when a generic type is used within another
-type, possibly in a recursive manner. In such cases, variance requires
-computation via a fixed-point algorithm, referred to as ``variance
-analysis''.
+Generic type variance can be derived from either the type usage or its
+definition{[}\citeproc{ref-Altidor2011}{16}{]}. Rustc employs
+definition-site variance for generic types, meaning that variance is
+computed from the type's definition, rather than its usage in functions.
+The situation becomes complicated when a generic type is used within
+another type, possibly in a recursive manner. In such cases, variance
+requires computation via a fixed-point algorithm, referred to as
+\emph{variance analysis}.
 
 \subsubsection{Variance Analysis}\label{sec:variance-analysis}
 
 Both rustc and gccrs implement variance analysis based on section 4 of
-the paper \citeproc{ref-Altidor2011}{{[}16{]}}. The notation from the
+the paper {[}\citeproc{ref-Altidor2011}{16}{]}. The notation from the
 paper is followed in the documentation of both compilers, as well as in
-this text. While the paper primarily focuses on the variance of complex
-types, like in the case of Java, it introduces an effective formal
-calculus, which is also applicable to higher-kinded lifetimes.
+this text. Although the paper primarily focuses on the variance of
+complex types, like in the case of Java, it introduces an effective
+formal calculus which is also applicable to higher-kinded lifetimes.
 
 For a thorough understanding of the exact rules, the paper and the
 source code are the best resources. Here, we provide only a basic
@@ -1709,7 +1710,7 @@ a lifetime or type parameter is encountered, then, if the current
 variance expression is constant, the variable is updated to the new
 variance using the join operation with the current value. For
 expressions containing at least one variable, the expression is added to
-a list of constraints and the fixed-point computation is used.
+a list of constraints, and the fixed-point computation is used.
 
 \begin{quote}
 \textbf{Example of Algorithm Execution}
@@ -1805,7 +1806,7 @@ a list of constraints and the fixed-point computation is used.
   \item
     \texttt{f0} is evident.
   \item
-    \texttt{f1} remains bivariant, as it is unmentioned in the type.
+    \texttt{f1} remains bivariant, as it is not mentioned in the type.
   \item
     \texttt{f2} is invariant due to its usage in both covariant and
     contravariant positions.
@@ -1814,7 +1815,7 @@ a list of constraints and the fixed-point computation is used.
 \end{quote}
 
 After processing all types in the crate, constraints are resolved using
-the fixed-point computation. Note that current crates might use generic
+fixed-point computation. Note that current crates might use generic
 types from other crates, necessitating the export/load of variance for
 public types.
 
@@ -1825,7 +1826,7 @@ which functions violate the rules. Currently, only the kind of violation
 is communicated from the Polonius engine to the compiler. More detailed
 reporting is an area for future work.
 
-There are three possible approaches for implementing more detailed
+There are three possible approaches to implement more detailed
 reporting:
 
 \begin{enumerate}
@@ -1873,7 +1874,7 @@ implemented in the following phases: First, an initial version of the
 borrow checker IR (BIR), lowering from HIR to BIR (the BIR builder), and
 a textual BIR dump were implemented. Second, the first version of the
 BIR fact collection and the Polonius FFI were added. At this stage, the
-first simple error detections were tested. Next, the implementation was
+first simple error detections were tested. The implementation was then
 extended to handle more complex data types, especially generics.
 Finally, the BIR fact collection was extended to handle the new
 information and emit all available facts.
@@ -1889,7 +1890,7 @@ expressions, function calls, and simple control flow operations
 blocks} to lower (and test) \texttt{break} and \texttt{continue}
 expressions. Note that in the Rust language, \texttt{break} and
 \texttt{continue} can use label identifiers to exit nested loops or
-return a value from any labeled block\citeproc{ref-reference}{{[}14{]}}.
+return a value from any labeled block{[}\citeproc{ref-reference}{14}{]}.
 
 The BIR dump was designed to be as similar to MIR as possible for manual
 verification. However, rustc performs many transformations on MIR, and
@@ -1903,7 +1904,7 @@ dump. MIR after each MIR pass can be exported from rustc using the
 option is available. The logical choice was to use the MIR version for
 borrow checking (\texttt{-Zdump-mir=nll}), which is less optimized and
 contains additional borrow checking information. Most BIR
-transformations were removed after this change ot the reference MIR
+transformations were removed after this change of the reference MIR
 dump.
 
 This initial BIR version and related infrastructure were submitted to
@@ -1915,10 +1916,10 @@ checker implementation. It is located in
 
 In the second phase, the fact collection and an interface to the
 Polonius engine were implemented. Initially, only lifetimes of simple
-references were handled (at most one lifetime per type). Fact collection
-processed all places in the place database and traversed the BIR control
-flow graphs. The interface to Polonius consists of a C ABI in gccrs and
-a C ABI (generated by
+references were handled (at most one lifetime per type). The fact
+collection processed all places in the place database and traversed the
+BIR control flow graphs. The interface to Polonius consists of a C ABI
+in gccrs and a C ABI (generated by
 \href{https://github.com/rust-lang/rust-bindgen}{rust-bindgen} and
 manually cleaned up and extended) in a small static Rust library (FFI
 Polonius). The FFI Polonius library's role is to invoke the Polonius
@@ -1971,14 +1972,15 @@ move error. The output reports that at a CFG point encoded as the number
 In the third (and final) phase, the entire borrow checker, the TyTy IR,
 and the type checker were extended to support complex types containing
 multiple regions (lifetimes). Variance analysis and helper region tools
-were implemented. The BIR builder and fact collection were expanded to
-handle the new information and emit all available facts. Correctly
-collecting facts is challenging due to limited documentation of the
-facts and their relationship with Rust code. The current implementation
-relies on the Polonius Book\citeproc{ref-polonius}{{[}10{]}}, the
-Polonius source code\citeproc{ref-poloniusSource}{{[}17{]}}, the rustc
-source code\citeproc{ref-rustcSource}{{[}18{]}}, and experiments using
-rustc and the Polonius CLI. Some facts might be missing or incorrectly
+were implemented. The BIR builder and the fact collection were expanded
+to handle the new information and emit all the available facts.
+Correctly collecting facts is challenging due to limited documentation
+of the facts and their relationship with Rust code. The current
+implementation relies on the Polonius
+Book{[}\citeproc{ref-polonius}{10}{]}, the Polonius source
+code{[}\citeproc{ref-poloniusSource}{17}{]}, the rustc source
+code{[}\citeproc{ref-rustcSource}{18}{]}, and experiments using rustc
+and the Polonius CLI. Some facts may be missing or incorrectly
 collected.
 
 The borrow checker could identify most errors that violate access rules
@@ -1986,10 +1988,10 @@ The borrow checker could identify most errors that violate access rules
 move/initialization errors, and subset errors. To demonstrate its
 functionality, a small test suite was created based on tests from the
 Polonius project, supplemented with custom ones. Ideally, the borrow
-checker would be tested against rustc test suite, but gccrs is currently
-unable to compile most of these tests as they rely on the Rust standard
-library. Examples from the gccrs borrow checker test suite are available
-in the appendix.
+checker would be tested against the rustc test suite, but gccrs is
+currently unable to compile most of these tests as they rely on the Rust
+standard library. Examples from the gccrs borrow checker test suite are
+available in the appendix \ref{sec:errors}.
 
 This phase is pending final cleanup and submission in the branch
 \href{https://github.com/jdupak/gccrs/tree/borrowck-stage2}{borrowck-stage2}.
@@ -2009,14 +2011,14 @@ a list of known limitations of the current implementation.
 \begin{itemize}
 \tightlist
 \item
-  Currently, only nongeneric functions are supported (not closures or
+  Currently, only non-generic functions are supported (not closures or
   \href{https://doc.rust-lang.org/nightly/reference/items/associated-items.html\#associated-functions-and-methods}{associated
   functions and methods}). Other function-like items require special
   top-level handling, though their body handling is identical. Generic
   functions must be monomorphised before checking.
 \item
-  Method calls are not handled due to required implicit coercion of the
-  \texttt{self} argument.
+  Method calls are not handled due to the required implicit coercion of
+  the \texttt{self} argument.
 \item
   The \texttt{?} operator and \texttt{while\ let} are not addressed.
   They will be removed at the \texttt{AST-\textgreater{}HIR} boundary.
@@ -2097,8 +2099,8 @@ a list of known limitations of the current implementation.
   The reasons for loan invalidation are not stored, which is necessary
   for practical error reporting.
 \item
-  Rustc prioritizes subset facts for displaying more relevant errors.
-  This is not implemented in gccrs.
+  Rustc prioritizes subset facts to display more relevant errors. This
+  is not implemented in gccrs.
 \end{itemize}
 
 \subsection{Polonius FFI and Error
@@ -2132,11 +2134,12 @@ The latest source code is available in the author's
 
 Detailed instructions for building gccrs are in the \texttt{README.md}
 file in the project's root directory. For tips on a better development
-experience (e.g., faster builds), refer to \citeproc{ref-svp}{{[}19{]}}.
+experience (e.g., faster builds), refer to {[}\citeproc{ref-svp}{19}{]}.
 
-The compiler binary is named \texttt{crab1}, and it is located in the
-\texttt{gcc} directory within the chosen build directory after building.
-Since gccrs is still experimental, the flag
+The gccrs binary is named \texttt{crab1}, and it is located in the
+\texttt{gcc} directory within the chosen build directory. When built
+from the \texttt{borrowck-stage2} branch the binary will automatically
+include the borrow checker. Since gccrs is still experimental, the flag
 \texttt{-frust-incomplete-and-experimental-compiler-do-not-use} is
 required to use the compiler. To enable the borrow checker, add the
 \texttt{-frust-borrowcheck} flag. Any detected borrow checker errors
@@ -2156,13 +2159,12 @@ will be reported as standard compilation errors.
 \end{Shaded}
 \end{quote}
 
-For a deeper inspection of the borrow checker, a debug build of the
-compiler is necessary. The \texttt{-frust-debug} flag enables debug
-logs, including the borrow checker activity. Unfortunately, GCC's debug
-logging lacks category filtering. The reader may find the variance
-analysis log, the borrow checker log (BIR build and fact collector), and
-Polonius debug output particularly interesting. This flag also activates
-the BIR dump (saved to
+The \texttt{-frust-debug} flag enables debug logs, including the borrow
+checker activity. Unfortunately, GCC's debug logging lacks category
+filtering. The reader may find the variance analysis log, the borrow
+checker log (BIR build and fact collector), and Polonius debug output
+particularly interesting. This flag also activates the BIR dump (saved
+to
 \texttt{./bir\_dump/\textless{}crate\_name?\textgreater{}/\textless{}function\_name?\textgreater{}.bir.dump})
 and \emph{facts} dump (saved to
 \texttt{nll\_facts\_gccrs/\textless{}function\_name\textgreater{}.facts}).
@@ -2197,12 +2199,11 @@ and \emph{facts} dump (saved to
 \NormalTok{crab1}\OperatorTok{:}\NormalTok{ note}\OperatorTok{:}\NormalTok{  \_0 }\OperatorTok{=}\NormalTok{ Assignment(\_10) at }\DecValTok{0}\OperatorTok{:}\DecValTok{11}
 \NormalTok{crab1}\OperatorTok{:}\NormalTok{ note}\OperatorTok{:}\NormalTok{  Sanitize field }\OperatorTok{.}\DecValTok{0}\NormalTok{ of Point}\OperatorTok{\{}\NormalTok{Point }\OperatorTok{\{}\NormalTok{x}\OperatorTok{:}\DataTypeTok{isize}\OperatorTok{,}\NormalTok{ y}\OperatorTok{:}\DataTypeTok{isize}\OperatorTok{\}\}}
 \NormalTok{crab1}\OperatorTok{:}\NormalTok{ note}\OperatorTok{:}\NormalTok{  Sanitize deref of }\OperatorTok{\&}\NormalTok{ Point}\OperatorTok{\{}\NormalTok{Point }\OperatorTok{\{}\NormalTok{x}\OperatorTok{:}\DataTypeTok{isize}\OperatorTok{,}\NormalTok{ y}\OperatorTok{:}\DataTypeTok{isize}\OperatorTok{\}\}}
-\NormalTok{crab1}\OperatorTok{:}\NormalTok{ note}\OperatorTok{:}\NormalTok{  Sanitize field }\OperatorTok{.}\DecValTok{0}\NormalTok{ of Point}\OperatorTok{\{}\NormalTok{Point }\OperatorTok{\{}\NormalTok{x}\OperatorTok{:}\DataTypeTok{isize}\OperatorTok{,}\NormalTok{ y}\OperatorTok{:}\DataTypeTok{isize}\OperatorTok{\}\}}
 \end{Highlighting}
 \end{Shaded}
 \end{quote}
 
-To obtain similar output from rustc, use the flags
+To obtain a similar output from rustc, use the flags
 \texttt{-Znll-facts\ -Zdump-mir=nll\ -Zidentify-regions}. With a debug
 build of rustc, you can also enable the borrow checker debug log using
 the environment variable \texttt{RUSTC\_LOG=rustc\_borrowck}. Building
@@ -2211,9 +2212,9 @@ rustc is described in the
 Developer Guide}.
 
 For more advanced debugging and inspection, gdb/lldb can be used as
-usual. A common issue with LLDB is its difficulty in correctly
-identifying virtual classes. To address this, a simple LLDB formatter
-for resolving TyTy classes based on internal identifiers is available in
+usual. A common issue with LLDB is its difficulty to correctly identify
+virtual classes. To address this, a simple LLDB formatter for resolving
+TyTy classes based on internal identifiers is available in
 \href{https://gist.github.com/jdupak/68af0f0ad91f3e6eba2c478dc4f662dd}{this
 gist}. This script can be used as a template and can be adapted to other
 classes suffering from this problem.
@@ -2223,7 +2224,7 @@ classes suffering from this problem.
 This project aimed to implement a prototype of a Polonius-based borrow
 checker for Rustc GCC to explore the feasibility of this approach and
 establish a code infrastructure for further development. The development
-was conducted in a \href{https://github.com/jdupak/gccrs/}{personal
+was carried out in a \href{https://github.com/jdupak/gccrs/}{personal
 fork} of Rust GCC, and stabilized parts are being integrated into the
 main \href{https://github.com/Rust-GCC/gccrs}{Rustc GCC GitHub
 repository}. All accepted changes are scheduled to be integrated into
@@ -2261,498 +2262,534 @@ supporting my continued work on Rust GCC.
 
 \appendix
 
+\cleardoublepage
+
 \chapter{References}\label{sec:references}
 
 \phantomsection\label{refs}
-\begin{CSLReferences}{0}{0}
+\begin{CSLReferences}{0}{1}
 \bibitem[\citeproctext]{ref-Matsakis2014}
 \CSLLeftMargin{{[}1{]} }%
-\CSLRightInline{N. D. Matsakis and F. S. Klock, {``The rust language,''}
-in \emph{Proceedings of the 2014 ACM SIGAda annual conference on high
-integrity language technology}, Oct. 2014. doi:
-\href{https://doi.org/10.1145/2663171.2663188}{10.1145/2663171.2663188}.}
+\CSLRightInline{MATSAKIS, Nicholas D. and KLOCK, Felix S. The rust
+language. In~: \emph{Proceedings of the 2014 ACM SIGAda annual
+conference on high integrity language technology}. ACM, October 2014.
+HILT '14.
+DOI~\href{https://doi.org/10.1145/2663171.2663188}{10.1145/2663171.2663188}.
+}
 
 \bibitem[\citeproctext]{ref-RustBelt}
 \CSLLeftMargin{{[}2{]} }%
-\CSLRightInline{N. Matsakis, {``Polonius: Either borrower or lender be,
-but responsibly.''} Rust Belt Rust Conference, Jan. 2020. Accessed: Jan.
-04, 2024. {[}Online{]}. Available:
+\CSLRightInline{MATSAKIS, Niko. \emph{Polonius: Either borrower or
+lender be, but responsibly}. Online. January 2020. Rust Belt Rust
+Conference. {[}Accessed~4~January~2024{]}. Available from:
 \url{https://www.youtube.com/watch?v=_agDeiWek8w}}
 
 \bibitem[\citeproctext]{ref-poloniusupdate}
 \CSLLeftMargin{{[}3{]} }%
-\CSLRightInline{R. Rakic and N. Matsakis, {``Polonius update.''} Oct.
-2023. Accessed: Jan. 04, 2024. {[}Online{]}. Available:
+\CSLRightInline{RAKIC, Rémy and MATSAKIS, Niko. \emph{Polonius update}.
+Online. October 2023. {[}Accessed~4~January~2024{]}. Available from:
 \url{https://blog.rust-lang.org/inside-rust/2023/10/06/polonius-update.html}}
 
 \bibitem[\citeproctext]{ref-eurorust}
 \CSLLeftMargin{{[}4{]} }%
-\CSLRightInline{A. Cohen, {``The road to compiling the standard library
-with gccrs.''} EuroRust, 2023. Accessed: Jan. 05, 2024. {[}Online{]}.
-Available: \url{https://www.youtube.com/watch?v=WgqGahDl-sY}}
+\CSLRightInline{COHEN, Arthur. \emph{The road to compiling the standard
+library with gccrs}. Online. 2023. EuroRust.
+{[}Accessed~5~January~2024{]}. Available from:
+\url{https://www.youtube.com/watch?v=WgqGahDl-sY}}
 
 \bibitem[\citeproctext]{ref-nsa}
 \CSLLeftMargin{{[}5{]} }%
 \CSLRightInline{\emph{{{``Software Memory Safety''}} {C}ybersecurity
-{I}nformation {S}heet}. The National Security Agency, 2022. Accessed:
-Dec. 29, 2023. {[}Online{]}. Available:
+{I}nformation {S}heet}. Online. The National Security Agency, 2022.
+{[}Accessed~29~December~2023{]}. Available from:
 \url{https://media.defense.gov/2022/nov/10/2003112742/-1/-1/0/csi_software_memory_safety.pdf}}
 
 \bibitem[\citeproctext]{ref-danglingpointer}
 \CSLLeftMargin{{[}6{]} }%
-\CSLRightInline{Mitre, {``CWE-416: Use after free.''} Accessed: Dec. 20,
-2023. {[}Online{]}. Available:
+\CSLRightInline{MITRE. \emph{CWE-416: Use after free}. Online.
+{[}Accessed~20~December~2023{]}. Available from:
 \url{https://cwe.mitre.org/data/definitions/416.html}}
 
 \bibitem[\citeproctext]{ref-rfc2094nll}
 \CSLLeftMargin{{[}7{]} }%
-\CSLRightInline{N. Matsakis, {``2094-nll,''} in \emph{The {R}ust {RFC}
-{B}ook}, Rust Foundation, 2017. Accessed: Dec. 18, 2023. {[}Online{]}.
-Available: \url{https://rust-lang.github.io/rfcs/2094-nll.html}}
+\CSLRightInline{MATSAKIS, Niko. 2094-nll. In~: \emph{The {R}ust {RFC}
+{B}ook}. Online. Rust Foundation, 2017. {[}Accessed~18~December~2023{]}.
+Available from: \url{https://rust-lang.github.io/rfcs/2094-nll.html}}
 
 \bibitem[\citeproctext]{ref-Stjerna2020}
 \CSLLeftMargin{{[}8{]} }%
-\CSLRightInline{A. Stjerna, {``{M}odelling {R}ust's {R}eference
-{O}wnership {A}nalysis {D}eclaratively in {D}atalog,''} Master's thesis,
-Uppsala University, 2020. Accessed: Dec. 28, 2023. {[}Online{]}.
-Available:
+\CSLRightInline{STJERNA, Albin. \emph{{M}odelling {R}ust's {R}eference
+{O}wnership {A}nalysis {D}eclaratively in {D}atalog}. Online. Master's
+thesis. Uppsala University, 2020. {[}Accessed~28~December~2023{]}.
+Available from:
 \url{https://www.diva-portal.org/smash/get/diva2:1684081/fulltext01.pdf}}
 
 \bibitem[\citeproctext]{ref-polonius2}
 \CSLLeftMargin{{[}9{]} }%
-\CSLRightInline{N. Matsakis, {``Polonius revisited, part 1.''} Sep. 22,
-2023. Accessed: Dec. 17, 2023. {[}Online{]}. Available:
+\CSLRightInline{MATSAKIS, Niko. \emph{Polonius revisited, part 1}.
+Online. 22 September 2023. {[}Accessed~17~December~2023{]}. Available
+from:
 \url{https://smallcultfollowing.com/babysteps/blog/2023/09/22/polonius-part-1/}}
 
 \bibitem[\citeproctext]{ref-polonius}
 \CSLLeftMargin{{[}10{]} }%
-\CSLRightInline{N. Matsakis, R. Rakic, \emph{et al.}, {``{T}he
-{P}olonius {B}ook.''} Rust Foundation, 2021.}
+\CSLRightInline{MATSAKIS, Niko, RAKIC, Rémy and OTHERS. \emph{{T}he
+{P}olonius {B}ook}. 2021. Rust Foundation. }
 
 \bibitem[\citeproctext]{ref-llvm}
 \CSLLeftMargin{{[}11{]} }%
-\CSLRightInline{\emph{Reference}. LLVM Project, 2023. Accessed: Dec. 15,
-2023. {[}Online{]}. Available:
+\CSLRightInline{\emph{Reference}. Online. LLVM Project, 2023.
+{[}Accessed~15~December~2023{]}. Available from:
 \url{https://llvm.org/docs/Reference.html}}
 
 \bibitem[\citeproctext]{ref-gccint}
 \CSLLeftMargin{{[}12{]} }%
-\CSLRightInline{R. M. Stallman and the GCC Developer Community,
-\emph{{GNU} {C}ompiler {C}ollection {I}nternals}, 14th ed. Free Software
-Foundation, 2023. Accessed: Dec. 18, 2023. {[}Online{]}. Available:
-\url{https://gcc.gnu.org/onlinedocs/gccint/}}
+\CSLRightInline{STALLMAN, Richard M. and GCC DEVELOPER COMMUNITY, the.
+\emph{{GNU} {C}ompiler {C}ollection {I}nternals}. Online. 14. Free
+Software Foundation, 2023. {[}Accessed~18~December~2023{]}. Available
+from: \url{https://gcc.gnu.org/onlinedocs/gccint/}}
 
 \bibitem[\citeproctext]{ref-devguide}
 \CSLLeftMargin{{[}13{]} }%
-\CSLRightInline{\emph{{R}ust {C}ompiler {D}evelopment {G}uide}. Rust
-Foundation, 2023. Accessed: Dec. 18, 2023. {[}Online{]}. Available:
+\CSLRightInline{\emph{{R}ust {C}ompiler {D}evelopment {G}uide}. Online.
+Rust Foundation, 2023. {[}Accessed~18~December~2023{]}. Available from:
 \url{https://rustc-dev-guide.rust-lang.org/index.html}}
 
 \bibitem[\citeproctext]{ref-reference}
 \CSLLeftMargin{{[}14{]} }%
-\CSLRightInline{Rustc developers, \emph{Reference}. Rust Foundation,
-2023. Accessed: Dec. 07, 2023. {[}Online{]}. Available:
+\CSLRightInline{RUSTC DEVELOPERS. \emph{Reference}. Online. Rust
+Foundation, 2023. {[}Accessed~7~December~2023{]}. Available from:
 \url{https://doc.rust-lang.org/reference/}}
 
 \bibitem[\citeproctext]{ref-zulip}
 \CSLLeftMargin{{[}15{]} }%
-\CSLRightInline{{``{\#}{c}ompiler-development \textgreater{}
-{B}orrowchecking vs ({H})IR - GCC rust - zulip.''} Sep. 05, 2023.
-Accessed: Dec. 05, 2023. {[}Online{]}. Available:
+\CSLRightInline{\emph{{\#}{c}ompiler-development \textgreater{}
+{B}orrowchecking vs ({H})IR - GCC rust - zulip}. Online. 5 September
+2023. {[}Accessed~5~December~2023{]}. Available from:
 \url{https://gcc-rust.zulipchat.com/\#narrow/stream/281658-compiler-development/topic/Borrowchecking.20vs.20.28H.29IR}}
 
 \bibitem[\citeproctext]{ref-Altidor2011}
 \CSLLeftMargin{{[}16{]} }%
-\CSLRightInline{J. Altidor, S. S. Huang, and Y. Smaragdakis, {``Taming
-the wildcards: Combining definition- and use-site variance,''} \emph{ACM
-SIGPLAN Notices}, vol. 46, no. 6, pp. 602--613, Jun. 2011, doi:
-\href{https://doi.org/10.1145/1993316.1993569}{10.1145/1993316.1993569}.}
+\CSLRightInline{ALTIDOR, John, HUANG, Shan Shan and SMARAGDAKIS, Yannis.
+Taming the wildcards: Combining definition- and use-site variance.
+\emph{ACM SIGPLAN Notices}. June 2011. Vol.~46, no.~6, p.~602--613.
+DOI~\href{https://doi.org/10.1145/1993316.1993569}{10.1145/1993316.1993569}.
+}
 
 \bibitem[\citeproctext]{ref-poloniusSource}
 \CSLLeftMargin{{[}17{]} }%
-\CSLRightInline{{``Polonius.''} Rust Foundation. Accessed: Dec. 29,
-2023. {[}Online{]}. Available:
+\CSLRightInline{\emph{Polonius}. Online. Rust Foundation.
+{[}Accessed~29~December~2023{]}. Available from:
 \url{https://github.com/rust-lang/polonius/}}
 
 \bibitem[\citeproctext]{ref-rustcSource}
 \CSLLeftMargin{{[}18{]} }%
-\CSLRightInline{{``Rust.''} Rust Foundation. Accessed: Dec. 28, 2023.
-{[}Online{]}. Available: \url{https://github.com/rust-lang/rust/}}
+\CSLRightInline{\emph{Rust}. Online. Rust Foundation.
+{[}Accessed~28~December~2023{]}. Available from:
+\url{https://github.com/rust-lang/rust/}}
 
 \bibitem[\citeproctext]{ref-svp}
 \CSLLeftMargin{{[}19{]} }%
-\CSLRightInline{J. Dupák, {``Contribution to the {R}ust front-end for
-the {GCC} compiler,''} research report, Czech Technical University in
-Prague, 2023. Accessed: Jan. 05, 2023. {[}Online{]}. Available:
-\url{https://jakubdupak.com/dev/academic/dupakjak-svp-report.pdf}}
+\CSLRightInline{DUPÁK, Jakub. \emph{Contribution to the {R}ust front-end
+for the {GCC} compiler}. Online. research report. Czech Technical
+University in Prague, 2023. {[}Accessed~5~January~2023{]}. Available
+from: \url{https://jakubdupak.com/dev/academic/dupakjak-svp-report.pdf}}
 
 \bibitem[\citeproctext]{ref-polonius3}
 \CSLLeftMargin{{[}20{]} }%
-\CSLRightInline{N. Matsakis, {``Polonius revisited, part 2.''} Sep. 29,
-2023. Accessed: Dec. 30, 2023. {[}Online{]}. Available:
+\CSLRightInline{MATSAKIS, Niko. \emph{Polonius revisited, part 2}.
+Online. 29 September 2023. {[}Accessed~30~December~2023{]}. Available
+from:
 \url{https://smallcultfollowing.com/babysteps/blog/2023/09/29/polonius-part-2/}}
 
 \bibitem[\citeproctext]{ref-rustonomicon}
 \CSLLeftMargin{{[}21{]} }%
-\CSLRightInline{A. Beingessner \emph{et al.}, \emph{The {R}ustonomicon}.
-Rust Foundation, 2023. Accessed: Dec. 15, 2023. {[}Online{]}. Available:
-\url{https://doc.rust-lang.org/nomicon/}}
+\CSLRightInline{BEINGESSNER, Aria and OTHERS. \emph{The {R}ustonomicon}.
+Online. Rust Foundation, 2023. {[}Accessed~15~December~2023{]}.
+Available from: \url{https://doc.rust-lang.org/nomicon/}}
 
 \end{CSLReferences}
 
+\section{Used Software}\label{sec:used-software}
+
+In accordance with the
+\href{https://www.cvut.cz/sites/default/files/content/d1dc93cd-5894-4521-b799-c7e715d3c59e/en/20231003-methodological-guideline-no-52023.pdf}{\emph{Methodological
+guideline No.~5/2023}}, the following software was used in the
+development of this thesis:
+
+\begin{itemize}
+\tightlist
+\item
+  \href{https://github.com/features/copilot}{GitHub Copilot} (with
+  disabled suggestions matching public code) for improved autocompletion
+  of code (Used only to complete the current line, not to generate any
+  larger code structures.)
+\item
+  \href{https://chat.openai.com/}{ChatGPT (OpenAI)} for text style
+  feedback and rephrasing suggestions
+\item
+  \href{https://www.grammarly.com/}{Grammarly} for grammar and spelling
+  checking
+\item
+  \href{https://www.writefull.com/}{Writefull} for style and grammar
+  checking
+\item
+  \href{https://plugins.jetbrains.com/plugin/16136-grazie-pro}{Grazie
+  Pro (JetBrains)} for grammar and spelling checking
+\end{itemize}
+
+\cleardoublepage
+
 \chapter{Rustc Intermediate Representations
 Examples}\label{sec:rustc-intermediate-representations-examples}
-
-\begin{quote}
-\textbf{Compilation commands:}
-
-\texttt{\$\ rustc\ -Z\ unpretty=ast-tree}
-
-\texttt{\$\ rustc\ -Z\ unpretty=hir-tree}
-
-\texttt{\$\ rustc\ -Z\ unpretty=mir\ -Z\ identify-regions}
-\end{quote}
 
 \section{Rust Source Code}\label{sec:rust-source-code}
 
 \begin{Shaded}
 \begin{Highlighting}[]
-    \KeywordTok{struct}\NormalTok{ Foo(}\DataTypeTok{i32}\NormalTok{)}\OperatorTok{;}
+\KeywordTok{struct}\NormalTok{ Foo(}\DataTypeTok{i32}\NormalTok{)}\OperatorTok{;}
 
-    \KeywordTok{fn}\NormalTok{ foo(x}\OperatorTok{:} \DataTypeTok{i32}\NormalTok{) }\OperatorTok{{-}\textgreater{}}\NormalTok{ Foo }\OperatorTok{\{}
-\NormalTok{        Foo(x)}
-    \OperatorTok{\}}
+\KeywordTok{fn}\NormalTok{ foo(x}\OperatorTok{:} \DataTypeTok{i32}\NormalTok{) }\OperatorTok{{-}\textgreater{}}\NormalTok{ Foo }\OperatorTok{\{}
+\NormalTok{    Foo(x)}
+\OperatorTok{\}}
 \end{Highlighting}
 \end{Shaded}
 
-\clearpage
-
 \section{Abstract Syntax Tree (AST)}\label{sec:abstract-syntax-tree-ast}
 
-\begin{verbatim}
+\begin{quote}
+\texttt{\$\ rustc\ -Z\ unpretty=ast-tree}
+\end{quote}
 
-Fn {
-    defaultness: Final,
-    generics: Generics {
-        params: [],
-        where_clause: WhereClause {
-            has_where_token: false,
-            predicates: [],
-            span: simple.rs:3:22: 3:22 (#0),
-        },
-        span: simple.rs:3:7: 3:7 (#0),
-    },
-    sig: FnSig {
-        header: FnHeader { unsafety: No, asyncness: No, constness: No },
-        decl: FnDecl {
-            inputs: [
-                Param {
-                    attrs: [],
-                    ty: Ty {
-                        id: NodeId(4294967040),
-                        kind: Path(
-                            None,
-                            Path {
-                                span: simple.rs:3:11: 3:14 (#0),
-                                segments: [
-                                    PathSegment {
-                                        ident: i31#0,
-                                        id: NodeId(4294967040),
-                                        args: None,
-                                    },
-                                ],
-                                tokens: None,
-                            },
-                        ),
-                        span: simple.rs:3:11: 3:14 (#0),
-                        tokens: None,
-                    },
-                    pat: Pat {
-                        id: NodeId(4294967040),
-                        kind: Ident(
-                            BindingAnnotation(No, Not),
-                            x#0,
-                            None,
-                        ),
-                        span: simple.rs:3:8: 3:9 (#0),
-                        tokens: None,
-                    },
-                    id: NodeId(4294967040),
-                    span: simple.rs:3:8: 3:14 (#0),
-                    is_placeholder: false,
-                },
-            ],
-            output: Ty(
-                Ty {
-                    id: NodeId(4294967040),
-                    kind: Path(
-                        None,
-                        Path {
-                            span: simple.rs:3:19: 3:22 (#0),
-                            segments: [
-                                PathSegment {
-                                    ident: Foo#0,
-                                    id: NodeId(4294967040),
-                                    args: None,
-                                },
-                            ],
-                            tokens: None,
-                        },
-                    ),
-                    span: simple.rs:3:19: 3:22 (#0),
-                    tokens: None,
-                },
-            ),
-        },
-        span: simple.rs:3:1: 3:22 (#0),
-    },
-    body: Some(
-        Block {
-            stmts: [
-                Stmt {
-                    id: NodeId(4294967040),
-                    kind: Expr(
-                        Expr {
-                            id: NodeId(4294967040),
-                            kind: Call(
-                                Expr {
-                                    id: NodeId(4294967040),
-                                    kind: Path(
-                                        None,
-                                        Path {
-                                            span: simple.rs:4:5: 4:8 (#0),
-                                            segments: [
-                                                PathSegment {
-                                                    ident: Foo#0,
-                                                    id: NodeId(4294967040),
-                                                    args: None,
-                                                },
-                                            ],
-                                            tokens: None,
-                                        },
-                                    ),
-                                    span: simple.rs:4:5: 4:8 (#0),
-                                    attrs: [],
-                                    tokens: None,
-                                },
-                                [
-                                    Expr {
-                                        id: NodeId(4294967040),
-                                        kind: Path(
-                                            None,
-                                            Path {
-                                                span: simple.rs:4:9: 4:10 (#0),
-                                                segments: [
-                                                    PathSegment {
-                                                        ident: x#0,
-                                                        id: NodeId(4294967040),
-                                                        args: None,
-                                                    },
-                                                ],
-                                                tokens: None,
-                                            },
-                                        ),
-                                        span: simple.rs:4:9: 4:10 (#0),
-                                        attrs: [],
-                                        tokens: None,
-                                    },
-                                ],
-                            ),
-                            span: simple.rs:4:5: 4:11 (#0),
-                            attrs: [],
-                            tokens: None,
-                        },
-                    ),
-                    span: simple.rs:4:5: 4:11 (#0),
-                },
-            ],
-            id: NodeId(4294967040),
-            rules: Default,
-            span: simple.rs:3:23: 5:2 (#0),
-            tokens: None,
-            could_be_bare_literal: false,
-        },
-    ),
-}
-\end{verbatim}
-
-\normalsize
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Fn \{}
+\NormalTok{    defaultness: Final,}
+\NormalTok{    generics: Generics \{}
+\NormalTok{        params: [],}
+\NormalTok{        where\_clause: WhereClause \{}
+\NormalTok{            has\_where\_token: false,}
+\NormalTok{            predicates: [],}
+\NormalTok{            span: simple.rs:3:22: 3:22 (\#0),}
+\NormalTok{        \},}
+\NormalTok{        span: simple.rs:3:7: 3:7 (\#0),}
+\NormalTok{    \},}
+\NormalTok{    sig: FnSig \{}
+\NormalTok{        header: FnHeader \{ unsafety: No, asyncness: No, constness: No \},}
+\NormalTok{        decl: FnDecl \{}
+\NormalTok{            inputs: [}
+\NormalTok{                Param \{}
+\NormalTok{                    attrs: [],}
+\NormalTok{                    ty: Ty \{}
+\NormalTok{                        id: NodeId(4294967040),}
+\NormalTok{                        kind: Path(}
+\NormalTok{                            None,}
+\NormalTok{                            Path \{}
+\NormalTok{                                span: simple.rs:3:11: 3:14 (\#0),}
+\NormalTok{                                segments: [}
+\NormalTok{                                    PathSegment \{}
+\NormalTok{                                        ident: i31\#0,}
+\NormalTok{                                        id: NodeId(4294967040),}
+\NormalTok{                                        args: None,}
+\NormalTok{                                    \},}
+\NormalTok{                                ],}
+\NormalTok{                                tokens: None,}
+\NormalTok{                            \},}
+\NormalTok{                        ),}
+\NormalTok{                        span: simple.rs:3:11: 3:14 (\#0),}
+\NormalTok{                        tokens: None,}
+\NormalTok{                    \},}
+\NormalTok{                    pat: Pat \{}
+\NormalTok{                        id: NodeId(4294967040),}
+\NormalTok{                        kind: Ident(}
+\NormalTok{                            BindingAnnotation(No, Not),}
+\NormalTok{                            x\#0,}
+\NormalTok{                            None,}
+\NormalTok{                        ),}
+\NormalTok{                        span: simple.rs:3:8: 3:9 (\#0),}
+\NormalTok{                        tokens: None,}
+\NormalTok{                    \},}
+\NormalTok{                    id: NodeId(4294967040),}
+\NormalTok{                    span: simple.rs:3:8: 3:14 (\#0),}
+\NormalTok{                    is\_placeholder: false,}
+\NormalTok{                \},}
+\NormalTok{            ],}
+\NormalTok{            output: Ty(}
+\NormalTok{                Ty \{}
+\NormalTok{                    id: NodeId(4294967040),}
+\NormalTok{                    kind: Path(}
+\NormalTok{                        None,}
+\NormalTok{                        Path \{}
+\NormalTok{                            span: simple.rs:3:19: 3:22 (\#0),}
+\NormalTok{                            segments: [}
+\NormalTok{                                PathSegment \{}
+\NormalTok{                                    ident: Foo\#0,}
+\NormalTok{                                    id: NodeId(4294967040),}
+\NormalTok{                                    args: None,}
+\NormalTok{                                \},}
+\NormalTok{                            ],}
+\NormalTok{                            tokens: None,}
+\NormalTok{                        \},}
+\NormalTok{                    ),}
+\NormalTok{                    span: simple.rs:3:19: 3:22 (\#0),}
+\NormalTok{                    tokens: None,}
+\NormalTok{                \},}
+\NormalTok{            ),}
+\NormalTok{        \},}
+\NormalTok{        span: simple.rs:3:1: 3:22 (\#0),}
+\NormalTok{    \},}
+\NormalTok{    body: Some(}
+\NormalTok{        Block \{}
+\NormalTok{            stmts: [}
+\NormalTok{                Stmt \{}
+\NormalTok{                    id: NodeId(4294967040),}
+\NormalTok{                    kind: Expr(}
+\NormalTok{                        Expr \{}
+\NormalTok{                            id: NodeId(4294967040),}
+\NormalTok{                            kind: Call(}
+\NormalTok{                                Expr \{}
+\NormalTok{                                    id: NodeId(4294967040),}
+\NormalTok{                                    kind: Path(}
+\NormalTok{                                        None,}
+\NormalTok{                                        Path \{}
+\NormalTok{                                            span: simple.rs:4:5: 4:8 (\#0),}
+\NormalTok{                                            segments: [}
+\NormalTok{                                                PathSegment \{}
+\NormalTok{                                                    ident: Foo\#0,}
+\NormalTok{                                                    id: NodeId(4294967040),}
+\NormalTok{                                                    args: None,}
+\NormalTok{                                                \},}
+\NormalTok{                                            ],}
+\NormalTok{                                            tokens: None,}
+\NormalTok{                                        \},}
+\NormalTok{                                    ),}
+\NormalTok{                                    span: simple.rs:4:5: 4:8 (\#0),}
+\NormalTok{                                    attrs: [],}
+\NormalTok{                                    tokens: None,}
+\NormalTok{                                \},}
+\NormalTok{                                [}
+\NormalTok{                                    Expr \{}
+\NormalTok{                                        id: NodeId(4294967040),}
+\NormalTok{                                        kind: Path(}
+\NormalTok{                                            None,}
+\NormalTok{                                            Path \{}
+\NormalTok{                                                span: simple.rs:4:9: 4:10 (\#0),}
+\NormalTok{                                                segments: [}
+\NormalTok{                                                    PathSegment \{}
+\NormalTok{                                                        ident: x\#0,}
+\NormalTok{                                                        id: NodeId(4294967040),}
+\NormalTok{                                                        args: None,}
+\NormalTok{                                                    \},}
+\NormalTok{                                                ],}
+\NormalTok{                                                tokens: None,}
+\NormalTok{                                            \},}
+\NormalTok{                                        ),}
+\NormalTok{                                        span: simple.rs:4:9: 4:10 (\#0),}
+\NormalTok{                                        attrs: [],}
+\NormalTok{                                        tokens: None,}
+\NormalTok{                                    \},}
+\NormalTok{                                ],}
+\NormalTok{                            ),}
+\NormalTok{                            span: simple.rs:4:5: 4:11 (\#0),}
+\NormalTok{                            attrs: [],}
+\NormalTok{                            tokens: None,}
+\NormalTok{                        \},}
+\NormalTok{                    ),}
+\NormalTok{                    span: simple.rs:4:5: 4:11 (\#0),}
+\NormalTok{                \},}
+\NormalTok{            ],}
+\NormalTok{            id: NodeId(4294967040),}
+\NormalTok{            rules: Default,}
+\NormalTok{            span: simple.rs:3:23: 5:2 (\#0),}
+\NormalTok{            tokens: None,}
+\NormalTok{            could\_be\_bare\_literal: false,}
+\NormalTok{        \},}
+\NormalTok{    ),}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
 
 \section{High-Level Intermediate Representation
 (HIR)}\label{sec:high-level-intermediate-representation-hir}
 
-\small
+\begin{quote}
+\texttt{\$\ rustc\ -Z\ unpretty=hir-tree}
+\end{quote}
 
-\begin{verbatim}
-Fn(
-    FnSig {
-        header: FnHeader {
-            unsafety: Normal,
-            constness: NotConst,
-            asyncness: NotAsync,
-            abi: Rust,
-        },
-        decl: FnDecl {
-            inputs: [
-                Ty {
-                    hir_id: HirId(DefId(0:6 ~ simple[415f]::foo).10),
-                    kind: Path(
-                        Resolved(
-                            None,
-                            Path {
-                                span: simple.rs:3:11: 3:14 (#0),
-                                res: PrimTy(
-                                    Int(
-                                        I32,
-                                    ),
-                                ),
-                                segments: [
-                                    PathSegment {
-                                        ident: i32#0,
-                                        hir_id: HirId(
-                                            DefId(0:6 ~ simple[415f]::foo).11),
-                                        res: PrimTy(
-                                            Int(
-                                                I32,
-                                            ),
-                                        ),
-                                        args: None,
-                                        infer_args: false,
-                                    },
-                                ],
-                            },
-                        ),
-                    ),
-                    span: simple.rs:3:11: 3:14 (#0),
-                },
-            ],
-            output: Return(
-                Ty {
-                    hir_id: HirId(DefId(0:6 ~ simple[415f]::foo).12),
-                    kind: Path(
-                        Resolved(
-                            None,
-                            Path {
-                                span: simple.rs:3:19: 3:22 (#0),
-                                res: Def(
-                                    Struct,
-                                    DefId(0:3 ~ simple[415f]::Foo),
-                                ),
-                                segments: [
-                                    PathSegment {
-                                        ident: Foo#0,
-                                        hir_id: HirId(
-                                            DefId(0:6 ~ simple[415f]::foo).13),
-                                        res: Def(
-                                            Struct,
-                                            DefId(0:3 ~ simple[415f]::Foo),
-                                        ),
-                                        args: None,
-                                        infer_args: false,
-                                    },
-                                ],
-                            },
-                        ),
-                    ),
-                    span: simple.rs:3:19: 3:22 (#0),
-                },
-            ),
-            c_variadic: false,
-            implicit_self: None,
-            lifetime_elision_allowed: false,
-        },
-        span: simple.rs:3:1: 3:22 (#0),
-    },
-    Generics {
-        params: [],
-        predicates: [],
-        has_where_clause_predicates: false,
-        where_clause_span: simple.rs:3:22: 3:22 (#0),
-        span: simple.rs:3:7: 3:7 (#0),
-    },
-    BodyId {
-        hir_id: HirId(DefId(0:6 ~ simple[415f]::foo).9),
-    },
-)
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Fn(}
+\NormalTok{    FnSig \{}
+\NormalTok{        header: FnHeader \{}
+\NormalTok{            unsafety: Normal,}
+\NormalTok{            constness: NotConst,}
+\NormalTok{            asyncness: NotAsync,}
+\NormalTok{            abi: Rust,}
+\NormalTok{        \},}
+\NormalTok{        decl: FnDecl \{}
+\NormalTok{            inputs: [}
+\NormalTok{                Ty \{}
+\NormalTok{                    hir\_id: HirId(DefId(0:6 \textasciitilde{} simple[415f]::foo).10),}
+\NormalTok{                    kind: Path(}
+\NormalTok{                        Resolved(}
+\NormalTok{                            None,}
+\NormalTok{                            Path \{}
+\NormalTok{                                span: simple.rs:3:11: 3:14 (\#0),}
+\NormalTok{                                res: PrimTy(}
+\NormalTok{                                    Int(}
+\NormalTok{                                        I32,}
+\NormalTok{                                    ),}
+\NormalTok{                                ),}
+\NormalTok{                                segments: [}
+\NormalTok{                                    PathSegment \{}
+\NormalTok{                                        ident: i32\#0,}
+\NormalTok{                                        hir\_id: HirId(}
+\NormalTok{                                            DefId(0:6 \textasciitilde{} simple[415f]::foo).11),}
+\NormalTok{                                        res: PrimTy(}
+\NormalTok{                                            Int(}
+\NormalTok{                                                I32,}
+\NormalTok{                                            ),}
+\NormalTok{                                        ),}
+\NormalTok{                                        args: None,}
+\NormalTok{                                        infer\_args: false,}
+\NormalTok{                                    \},}
+\NormalTok{                                ],}
+\NormalTok{                            \},}
+\NormalTok{                        ),}
+\NormalTok{                    ),}
+\NormalTok{                    span: simple.rs:3:11: 3:14 (\#0),}
+\NormalTok{                \},}
+\NormalTok{            ],}
+\NormalTok{            output: Return(}
+\NormalTok{                Ty \{}
+\NormalTok{                    hir\_id: HirId(DefId(0:6 \textasciitilde{} simple[415f]::foo).12),}
+\NormalTok{                    kind: Path(}
+\NormalTok{                        Resolved(}
+\NormalTok{                            None,}
+\NormalTok{                            Path \{}
+\NormalTok{                                span: simple.rs:3:19: 3:22 (\#0),}
+\NormalTok{                                res: Def(}
+\NormalTok{                                    Struct,}
+\NormalTok{                                    DefId(0:3 \textasciitilde{} simple[415f]::Foo),}
+\NormalTok{                                ),}
+\NormalTok{                                segments: [}
+\NormalTok{                                    PathSegment \{}
+\NormalTok{                                        ident: Foo\#0,}
+\NormalTok{                                        hir\_id: HirId(}
+\NormalTok{                                            DefId(0:6 \textasciitilde{} simple[415f]::foo).13),}
+\NormalTok{                                        res: Def(}
+\NormalTok{                                            Struct,}
+\NormalTok{                                            DefId(0:3 \textasciitilde{} simple[415f]::Foo),}
+\NormalTok{                                        ),}
+\NormalTok{                                        args: None,}
+\NormalTok{                                        infer\_args: false,}
+\NormalTok{                                    \},}
+\NormalTok{                                ],}
+\NormalTok{                            \},}
+\NormalTok{                        ),}
+\NormalTok{                    ),}
+\NormalTok{                    span: simple.rs:3:19: 3:22 (\#0),}
+\NormalTok{                \},}
+\NormalTok{            ),}
+\NormalTok{            c\_variadic: false,}
+\NormalTok{            implicit\_self: None,}
+\NormalTok{            lifetime\_elision\_allowed: false,}
+\NormalTok{        \},}
+\NormalTok{        span: simple.rs:3:1: 3:22 (\#0),}
+\NormalTok{    \},}
+\NormalTok{    Generics \{}
+\NormalTok{        params: [],}
+\NormalTok{        predicates: [],}
+\NormalTok{        has\_where\_clause\_predicates: false,}
+\NormalTok{        where\_clause\_span: simple.rs:3:22: 3:22 (\#0),}
+\NormalTok{        span: simple.rs:3:7: 3:7 (\#0),}
+\NormalTok{    \},}
+\NormalTok{    BodyId \{}
+\NormalTok{        hir\_id: HirId(DefId(0:6 \textasciitilde{} simple[415f]::foo).9),}
+\NormalTok{    \},}
+\NormalTok{)}
 
-...
+\NormalTok{...}
 
-Expr {
-    hir_id: HirId(DefId(0:6 ~ simple[415f]::foo).3),
-    kind: Call(
-        Expr {
-            hir_id: HirId(DefId(0:6 ~ simple[415f]::foo).4),
-            kind: Path(
-                Resolved(
-                    None,
-                    Path {
-                        span: simple.rs:4:5: 4:8 (#0),
-                        res: Def(
-                            Ctor(
-                                Struct,
-                                Fn,
-                            ),
-                            DefId(0:4 ~ simple[415f]::Foo::{constructor#0}),
-                        ),
-                        segments: [
-                            PathSegment {
-                                ident: Foo#0,
-                                hir_id: HirId(DefId(0:6 ~ simple[415f]::foo).5),
-                                res: Def(
-                                    Ctor(
-                                        Struct,
-                                        Fn,
-                                    ),
-                                    DefId(0:4 ~ simple[415f]::Foo::{constructor#0}),
-                                ),
-                                args: None,
-                                infer_args: true,
-                            },
-                        ],
-                    },
-                ),
-            ),
-            span: simple.rs:4:5: 4:8 (#0),
-        },
-        [
-            Expr {
-                hir_id: HirId(DefId(0:6 ~ simple[415f]::foo).6),
-                kind: Path(
-                    Resolved(
-                        None,
-                        Path {
-                            span: simple.rs:4:9: 4:10 (#0),
-                            res: Local(
-                                HirId(DefId(0:6 ~ simple[415f]::foo).2),
-                            ),
-                            segments: [
-                                PathSegment {
-                                    ident: x#0,
-                                    hir_id: HirId(
-                                        DefId(0:6 ~ simple[415f]::foo).7),
-                                    res: Local(
-                                        HirId(
-                                            DefId(0:6 ~ simple[415f]::foo).2),
-                                    ),
-                                    args: None,
-                                    infer_args: true,
-                                },
-                            ],
-                        },
-                    ),
-                ),
-                span: simple.rs:4:9: 4:10 (#0),
-            },
-        ],
-    ),
-    span: simple.rs:4:5: 4:11 (#0),
-}
-\end{verbatim}
-
-\normalsize
+\NormalTok{Expr \{}
+\NormalTok{    hir\_id: HirId(DefId(0:6 \textasciitilde{} simple[415f]::foo).3),}
+\NormalTok{    kind: Call(}
+\NormalTok{        Expr \{}
+\NormalTok{            hir\_id: HirId(DefId(0:6 \textasciitilde{} simple[415f]::foo).4),}
+\NormalTok{            kind: Path(}
+\NormalTok{                Resolved(}
+\NormalTok{                    None,}
+\NormalTok{                    Path \{}
+\NormalTok{                        span: simple.rs:4:5: 4:8 (\#0),}
+\NormalTok{                        res: Def(}
+\NormalTok{                            Ctor(}
+\NormalTok{                                Struct,}
+\NormalTok{                                Fn,}
+\NormalTok{                            ),}
+\NormalTok{                            DefId(0:4 \textasciitilde{} simple[415f]::Foo::\{constructor\#0\}),}
+\NormalTok{                        ),}
+\NormalTok{                        segments: [}
+\NormalTok{                            PathSegment \{}
+\NormalTok{                                ident: Foo\#0,}
+\NormalTok{                                hir\_id: HirId(DefId(0:6 \textasciitilde{} simple[415f]::foo).5),}
+\NormalTok{                                res: Def(}
+\NormalTok{                                    Ctor(}
+\NormalTok{                                        Struct,}
+\NormalTok{                                        Fn,}
+\NormalTok{                                    ),}
+\NormalTok{                                    DefId(0:4 \textasciitilde{} simple[415f]::Foo::\{constructor\#0\}),}
+\NormalTok{                                ),}
+\NormalTok{                                args: None,}
+\NormalTok{                                infer\_args: true,}
+\NormalTok{                            \},}
+\NormalTok{                        ],}
+\NormalTok{                    \},}
+\NormalTok{                ),}
+\NormalTok{            ),}
+\NormalTok{            span: simple.rs:4:5: 4:8 (\#0),}
+\NormalTok{        \},}
+\NormalTok{        [}
+\NormalTok{            Expr \{}
+\NormalTok{                hir\_id: HirId(DefId(0:6 \textasciitilde{} simple[415f]::foo).6),}
+\NormalTok{                kind: Path(}
+\NormalTok{                    Resolved(}
+\NormalTok{                        None,}
+\NormalTok{                        Path \{}
+\NormalTok{                            span: simple.rs:4:9: 4:10 (\#0),}
+\NormalTok{                            res: Local(}
+\NormalTok{                                HirId(DefId(0:6 \textasciitilde{} simple[415f]::foo).2),}
+\NormalTok{                            ),}
+\NormalTok{                            segments: [}
+\NormalTok{                                PathSegment \{}
+\NormalTok{                                    ident: x\#0,}
+\NormalTok{                                    hir\_id: HirId(}
+\NormalTok{                                        DefId(0:6 \textasciitilde{} simple[415f]::foo).7),}
+\NormalTok{                                    res: Local(}
+\NormalTok{                                        HirId(}
+\NormalTok{                                            DefId(0:6 \textasciitilde{} simple[415f]::foo).2),}
+\NormalTok{                                    ),}
+\NormalTok{                                    args: None,}
+\NormalTok{                                    infer\_args: true,}
+\NormalTok{                                \},}
+\NormalTok{                            ],}
+\NormalTok{                        \},}
+\NormalTok{                    ),}
+\NormalTok{                ),}
+\NormalTok{                span: simple.rs:4:9: 4:10 (\#0),}
+\NormalTok{            \},}
+\NormalTok{        ],}
+\NormalTok{    ),}
+\NormalTok{    span: simple.rs:4:5: 4:11 (\#0),}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
 
 \section{Mid-Level Intermediate Representation
 (MIR)}\label{sec:mid-level-intermediate-representation-mir}
+
+\begin{quote}
+\texttt{\$\ rustc\ -Z\ unpretty=mir\ -Z\ identify-regions}
+\end{quote}
 
 \begin{verbatim}
 fn foo(_1: i32) -> Foo {
@@ -2774,6 +2811,8 @@ fn Foo(_1: i32) -> Foo {
     }
 }
 \end{verbatim}
+
+\cleardoublepage
 
 \chapter{Comparison of BIR and MIR}\label{sec:comparison-of-bir-and-mir}
 
@@ -3018,17 +3057,24 @@ fn fib(_1: u32) -> u32 {
 }
 \end{Parallel}
 
+\cleardoublepage
+
 \chapter{Examples of Errors Detected by the
 Borrow-Checker}\label{sec:errors}
 
-A faulty program from gccrs test suite together with a fixed alternative
-(when applicable) is presented. Expected errors are marked using special
-comments used by the DejaGnu compiler testing framework.
+This appendix presents some faulty program from gccrs test suite
+together with a fixed alternative (when applicable). Expected errors are
+marked using special comments used by the DejaGnu compiler testing
+framework.
+
+Comments staring with \texttt{//\textasciitilde{}\ ERROR} provide
+additional details for the reader. They are not a functional part of the
+test suite.
 
 \section{Move Errors}\label{sec:move-errors}
 
 A simple test, where an instance of type A, which is not trivially
-copiable (does not implement the compy trait) is moved twice.
+copyable (does not implement the \texttt{Copy} trait) is moved twice.
 
 \begin{quote}
 \begin{Shaded}
@@ -3039,8 +3085,8 @@ copiable (does not implement the compy trait) is moved twice.
 \NormalTok{        i}\OperatorTok{:} \DataTypeTok{i32}\OperatorTok{,}
     \OperatorTok{\}}
     \KeywordTok{let}\NormalTok{ a }\OperatorTok{=}\NormalTok{ A }\OperatorTok{\{}\NormalTok{ i}\OperatorTok{:} \DecValTok{1} \OperatorTok{\};}
-    \KeywordTok{let}\NormalTok{ b }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;}
-    \KeywordTok{let}\NormalTok{ c }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ b }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;} \CommentTok{// a is moved here for the first time}
+    \KeywordTok{let}\NormalTok{ c }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;} \CommentTok{//\textasciitilde{} ERROR \textasciigrave{}a\textasciigrave{} moved here for the second time}
 \OperatorTok{\}}
 \end{Highlighting}
 \end{Shaded}
@@ -3050,16 +3096,16 @@ copiable (does not implement the compy trait) is moved twice.
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{fn}\NormalTok{ test\_move\_fixed() }\OperatorTok{\{}
-    \KeywordTok{let}\NormalTok{ a }\OperatorTok{=} \DecValTok{1}\OperatorTok{;} \CommentTok{// a is now primitive and can be copied}
-    \KeywordTok{let}\NormalTok{ b }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ a }\OperatorTok{=} \DecValTok{1}\OperatorTok{;} \CommentTok{// \textasciigrave{}a\textasciigrave{} is now primitive and can be copied}
+    \KeywordTok{let}\NormalTok{ b }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;} \CommentTok{// \textasciigrave{}a\textasciigrave{} is not moved here}
     \KeywordTok{let}\NormalTok{ c }\OperatorTok{=}\NormalTok{ b}\OperatorTok{;}
 \OperatorTok{\}}
 \end{Highlighting}
 \end{Shaded}
 \end{quote}
 
-More complex text test, where moves the occurence of the error depends
-on runtime values. Error is raised bacause for some values, the
+More complex text test, where moves the occurrence of the error depends
+on runtime values. Error is raised because for some values, the
 violation is possible
 
 \begin{quote}
@@ -3067,17 +3113,14 @@ violation is possible
 \begin{Highlighting}[]
 \KeywordTok{fn}\NormalTok{ test\_move\_conditional(b1}\OperatorTok{:} \DataTypeTok{bool}\OperatorTok{,}\NormalTok{ b2}\OperatorTok{:}\DataTypeTok{bool}\NormalTok{) }\OperatorTok{\{}
      \CommentTok{// \{ dg{-}error "Found move errors in function test\_move" \}}
-    \KeywordTok{struct}\NormalTok{ A }\OperatorTok{\{}
-\NormalTok{        i}\OperatorTok{:} \DataTypeTok{i32}\OperatorTok{,}
-    \OperatorTok{\}}
+    \KeywordTok{struct}\NormalTok{ A }\OperatorTok{\{}\NormalTok{ i}\OperatorTok{:} \DataTypeTok{i32} \OperatorTok{\}}
 
-    \KeywordTok{let}\NormalTok{ a }\OperatorTok{=}\NormalTok{ A }\OperatorTok{\{}\NormalTok{ i}\OperatorTok{:} \DecValTok{1} \OperatorTok{\};}
-    \KeywordTok{let}\NormalTok{ b }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ a }\OperatorTok{=}\NormalTok{ A }\OperatorTok{\{}\NormalTok{ i}\OperatorTok{:} \DecValTok{1} \OperatorTok{\};} \CommentTok{// \textasciigrave{}A\textasciigrave{} cannot be copied}
     \ControlFlowTok{if}\NormalTok{ b1 }\OperatorTok{\{}
-        \KeywordTok{let}\NormalTok{ b }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;}
+        \KeywordTok{let}\NormalTok{ b }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;} \CommentTok{// \textasciigrave{}a\textasciigrave{} might be moved here for the first time}
     \OperatorTok{\}}
     \ControlFlowTok{if}\NormalTok{ b2 }\OperatorTok{\{}
-        \KeywordTok{let}\NormalTok{ c }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;}
+        \KeywordTok{let}\NormalTok{ c }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;} \CommentTok{// \textasciigrave{}a\textasciigrave{} might be moved here for the second time}
     \OperatorTok{\}}
 \OperatorTok{\}}
 \end{Highlighting}
@@ -3088,9 +3131,7 @@ violation is possible
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{fn}\NormalTok{ test\_move\_fixed(b1}\OperatorTok{:} \DataTypeTok{bool}\OperatorTok{,}\NormalTok{ b2}\OperatorTok{:}\DataTypeTok{bool}\NormalTok{) }\OperatorTok{\{}
-
     \KeywordTok{let}\NormalTok{ a }\OperatorTok{=} \DecValTok{1}\OperatorTok{;} \CommentTok{// a is now primitive and can be copied}
-    \KeywordTok{let}\NormalTok{ b }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;}
     \ControlFlowTok{if}\NormalTok{ b1 }\OperatorTok{\{}
         \KeywordTok{let}\NormalTok{ b }\OperatorTok{=}\NormalTok{ a}\OperatorTok{;}
     \OperatorTok{\}}
@@ -3102,19 +3143,78 @@ violation is possible
 \end{Shaded}
 \end{quote}
 
+\clearpage
+
 \section{Subset Errors}\label{sec:subset-errors}
 
-TODO
+In the following examples, a reference with insufficient lifetime might
+be returned from a function.
 
-\section{Loan Error}\label{sec:loan-error}
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ missing\_subset}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{,} \OtherTok{\textquotesingle{}b}\OperatorTok{\textgreater{}}\NormalTok{(x}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \DataTypeTok{u32}\OperatorTok{,}\NormalTok{ y}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}b} \DataTypeTok{u32}\NormalTok{) }\OperatorTok{{-}\textgreater{}} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \DataTypeTok{u32} \OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found subset errors in function missing\_subset" \} }
+\NormalTok{    y }\CommentTok{//\textasciitilde{} ERROR}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
 
-TODO
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ missing\_subset\_fixed}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{,} \OtherTok{\textquotesingle{}b}\OperatorTok{\textgreater{}}\NormalTok{(x}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \DataTypeTok{u32}\OperatorTok{,}\NormalTok{ y}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}b} \DataTypeTok{u32}\NormalTok{) }\OperatorTok{{-}\textgreater{}} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \DataTypeTok{u32}
+    \KeywordTok{where} \OtherTok{\textquotesingle{}b}\OperatorTok{:} \OtherTok{\textquotesingle{}a} \OperatorTok{\{}
+\NormalTok{    y}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
 
-The following test were used when Polonius was first experimentally
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ complex\_cfg\_subset}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{,} \OtherTok{\textquotesingle{}b}\OperatorTok{\textgreater{}}\NormalTok{(b}\OperatorTok{:} \DataTypeTok{bool}\OperatorTok{,}\NormalTok{ x}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \DataTypeTok{u32}\OperatorTok{,}\NormalTok{ y}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}b} \DataTypeTok{u32}\NormalTok{)}
+    \OperatorTok{{-}\textgreater{}} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \DataTypeTok{u32} \OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found subset errors in function}
+\NormalTok{         complex\_cfg\_subset}\StringTok{" \} }
+\StringTok{    if b \{}
+\StringTok{        y //\textasciitilde{} ERROR}
+\StringTok{    \} else \{}
+\StringTok{        x}
+\StringTok{    \}}
+\StringTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ complex\_cfg\_subset\_fixed}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{,} \OtherTok{\textquotesingle{}b}\OperatorTok{\textgreater{}}\NormalTok{(b}\OperatorTok{:} \DataTypeTok{bool}\OperatorTok{,}\NormalTok{ x}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \DataTypeTok{u32}\OperatorTok{,}\NormalTok{ y}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}b} \DataTypeTok{u32}\NormalTok{)}
+    \OperatorTok{{-}\textgreater{}} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \DataTypeTok{u32} \KeywordTok{where} \OtherTok{\textquotesingle{}b}\OperatorTok{:} \OtherTok{\textquotesingle{}a} \OperatorTok{\{}
+    \ControlFlowTok{if}\NormalTok{ b }\OperatorTok{\{}
+\NormalTok{        x}
+    \OperatorTok{\}} \ControlFlowTok{else} \OperatorTok{\{}
+\NormalTok{        y}
+    \OperatorTok{\}}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\clearpage
+
+\section{Loan Errors}\label{sec:loan-errors}
+
+\subsection{Polonius Smoke Test}\label{sec:polonius-smoke-test}
+
+The following tests were used when Polonius was first experimentally
 integrated into rustc.
 
 In this test \texttt{s} is moved while it is borrowed. The test checks
-that facts are corectly propagated through the function call.
+that facts are correctly propagated through the function call.
 
 \begin{quote}
 \begin{Shaded}
@@ -3135,7 +3235,7 @@ that facts are corectly propagated through the function call.
 \end{Shaded}
 \end{quote}
 
-This test check that variable cannot be used while borrowed.
+This test checks that variable cannot be used while borrowed.
 
 \begin{quote}
 \begin{Shaded}
@@ -3166,6 +3266,352 @@ reference passed as an argument.
 \end{Highlighting}
 \end{Shaded}
 \end{quote}
+
+\clearpage
+
+This code fails under NLL but not under Polonius (including in gccrs).
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{pub} \KeywordTok{fn}\NormalTok{ position\_dependent\_outlives}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}}\NormalTok{(x}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \KeywordTok{mut} \DataTypeTok{i32}\OperatorTok{,}\NormalTok{ cond}\OperatorTok{:} \DataTypeTok{bool}\NormalTok{)}
+    \OperatorTok{{-}\textgreater{}} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \KeywordTok{mut} \DataTypeTok{i32} \OperatorTok{\{}
+    \KeywordTok{let}\NormalTok{ y }\OperatorTok{=} \OperatorTok{\&}\KeywordTok{mut} \OperatorTok{*}\NormalTok{x}\OperatorTok{;}
+    \ControlFlowTok{if}\NormalTok{ cond }\OperatorTok{\{}
+        \ControlFlowTok{return}\NormalTok{ y}\OperatorTok{;}
+    \OperatorTok{\}} \ControlFlowTok{else} \OperatorTok{\{}
+        \OperatorTok{*}\NormalTok{x }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}
+        \ControlFlowTok{return}\NormalTok{ x}\OperatorTok{;}
+    \OperatorTok{\}}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\subsection{Additional Tests of Access
+Rules}\label{sec:additional-tests-of-access-rules}
+
+The tested rule should be obvious form the test name.
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ immutable\_borrow\_while\_immutable\_borrowed() }\OperatorTok{\{}
+    \KeywordTok{let}\NormalTok{ x }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ y }\OperatorTok{=} \OperatorTok{\&}\NormalTok{x}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ z }\OperatorTok{=} \OperatorTok{\&}\NormalTok{x}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ w }\OperatorTok{=}\NormalTok{ y}\OperatorTok{;}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ immutable\_borrow\_while\_mutable\_borrowed() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found loan errors in function}
+\NormalTok{         immutable\_borrow\_while\_mutable\_borrowed}\StringTok{" \}}
+\StringTok{    let mut x = 0;}
+\StringTok{    let y = \&mut x;}
+\StringTok{    let z = \&x; //\textasciitilde{} ERROR}
+\StringTok{    let w = y;}
+\StringTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ mutable\_borrow\_while\_immutable\_borrowed() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found loan errors in function}
+\NormalTok{         mutable\_borrow\_while\_immutable\_borrowed}\StringTok{" \}}
+\StringTok{    let x = 0;}
+\StringTok{    let y = \&x;}
+\StringTok{    let z = \&mut x; //\textasciitilde{} ERROR}
+\StringTok{    let w = y;}
+\StringTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ mutable\_borrow\_while\_mutable\_borrowed() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found loan errors in function}
+\NormalTok{         mutable\_borrow\_while\_mutable\_borrowed}\StringTok{" \}}
+\StringTok{    let mut x = 0;}
+\StringTok{    let y = \&mut x;}
+\StringTok{    let z = \&mut x; //\textasciitilde{} ERROR}
+\StringTok{    let w = y;}
+\StringTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ immutable\_reborrow\_while\_immutable\_borrowed() }\OperatorTok{\{}
+    \KeywordTok{let}\NormalTok{ x }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ y }\OperatorTok{=} \OperatorTok{\&}\NormalTok{x}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ z }\OperatorTok{=} \OperatorTok{\&*}\NormalTok{y}\OperatorTok{;}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ immutable\_reborrow\_while\_mutable\_borrowed() }\OperatorTok{\{}
+    \KeywordTok{let} \KeywordTok{mut}\NormalTok{ x }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ y }\OperatorTok{=} \OperatorTok{\&}\KeywordTok{mut}\NormalTok{ x}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ z }\OperatorTok{=} \OperatorTok{\&*}\NormalTok{y}\OperatorTok{;}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ mutable\_reborrow\_while\_immutable\_borrowed() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Cannot reborrow immutable borrow as mutable" \}}
+    \KeywordTok{let}\NormalTok{ x }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ y }\OperatorTok{=} \OperatorTok{\&}\NormalTok{x}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ z }\OperatorTok{=} \OperatorTok{\&}\KeywordTok{mut} \OperatorTok{*}\NormalTok{y}\OperatorTok{;} \CommentTok{//\textasciitilde{} ERROR}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ read\_while\_mutable\_borrowed() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found loan errors in function}
+\NormalTok{         read\_while\_mutable\_borrowed}\StringTok{" \}}
+\StringTok{    let mut x = 0;}
+\StringTok{    let y = \&mut x;}
+\StringTok{    let z = x; //\textasciitilde{} ERROR}
+\StringTok{    let w = y;}
+\StringTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ write\_while\_borrowed() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found loan errors in function write\_while\_borrowed" \}}
+    \KeywordTok{let} \KeywordTok{mut}\NormalTok{ x }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ y }\OperatorTok{=} \OperatorTok{\&}\NormalTok{x}\OperatorTok{;}
+\NormalTok{    x }\OperatorTok{=} \DecValTok{1}\OperatorTok{;} \CommentTok{//\textasciitilde{} ERROR}
+    \KeywordTok{let}\NormalTok{ z }\OperatorTok{=}\NormalTok{ y}\OperatorTok{;}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ write\_while\_immutable\_borrowed() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found loan errors in function}
+\NormalTok{         write\_while\_immutable\_borrowed}\StringTok{" \}}
+\StringTok{    let x = 0;}
+\StringTok{    let y = \&x;}
+\StringTok{    x = 1; //\textasciitilde{} ERROR}
+\StringTok{    let z = y;}
+\StringTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\subsection{Access Rules Violations with
+Structs}\label{sec:access-rules-violations-with-structs}
+
+The following test demonstrated that the previous tests work also when
+the references are wrapped in structs. Type generic structs cannot be
+demonstrated due to a preexisting bug in gccrs. This bug is unrelated to
+the borrow-checker, but it creates invalid TyTy.
+
+Note that due to one limitation of the current implementation, the
+\texttt{impl} functions need to explicitly specify the
+\texttt{\textless{}\textquotesingle{}a\textgreater{}} lifetime
+parameter. This is not required and not allowed in Rust
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{struct}\NormalTok{ Reference}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}} \OperatorTok{\{}
+\NormalTok{    value}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \DataTypeTok{i32}\OperatorTok{,}
+\OperatorTok{\}}
+
+\KeywordTok{impl}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}}\NormalTok{ Reference}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}} \OperatorTok{\{}
+    \KeywordTok{fn}\NormalTok{ new}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}}\NormalTok{(value}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \DataTypeTok{i32}\NormalTok{) }\OperatorTok{{-}\textgreater{}}\NormalTok{ Reference}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}} \OperatorTok{\{}
+\NormalTok{        Reference }\OperatorTok{\{}\NormalTok{ value}\OperatorTok{:}\NormalTok{ value }\OperatorTok{\}}
+    \OperatorTok{\}}
+\OperatorTok{\}}
+
+\KeywordTok{struct}\NormalTok{ ReferenceMut}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}} \OperatorTok{\{}
+\NormalTok{    value}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \KeywordTok{mut} \DataTypeTok{i32}\OperatorTok{,}
+\OperatorTok{\}}
+
+\KeywordTok{impl}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}}\NormalTok{ ReferenceMut}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}} \OperatorTok{\{}
+    \KeywordTok{fn}\NormalTok{ new}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}}\NormalTok{(value}\OperatorTok{:} \OperatorTok{\&}\OtherTok{\textquotesingle{}a} \KeywordTok{mut} \DataTypeTok{i32}\NormalTok{) }\OperatorTok{{-}\textgreater{}}\NormalTok{ ReferenceMut}\OperatorTok{\textless{}}\OtherTok{\textquotesingle{}a}\OperatorTok{\textgreater{}} \OperatorTok{\{}
+\NormalTok{        ReferenceMut }\OperatorTok{\{}\NormalTok{ value}\OperatorTok{:}\NormalTok{ value }\OperatorTok{\}}
+    \OperatorTok{\}}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ immutable\_borrow\_while\_immutable\_borrowed\_struct() }\OperatorTok{\{}
+    \KeywordTok{let}\NormalTok{ x }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ y }\OperatorTok{=} \PreprocessorTok{Reference::}\NormalTok{new(}\OperatorTok{\&}\NormalTok{x)}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ z }\OperatorTok{=} \OperatorTok{\&}\NormalTok{x}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ w }\OperatorTok{=}\NormalTok{ y}\OperatorTok{;}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ immutable\_borrow\_while\_mutable\_borrowed\_struct() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found loan errors in function}
+\NormalTok{         immutable\_borrow\_while\_mutable\_borrowed\_struct}\StringTok{" \}}
+\StringTok{    let mut x = 0;}
+\StringTok{    let y = ReferenceMut::new(\&mut x);}
+\StringTok{    let z = \&x; //\textasciitilde{} ERROR}
+\StringTok{    let w = y;}
+\StringTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ mutable\_borrow\_while\_immutable\_borrowed\_struct() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found loan errors in function}
+\NormalTok{         mutable\_borrow\_while\_immutable\_borrowed\_struct}\StringTok{" \}}
+\StringTok{    let x = 0;}
+\StringTok{    let y = Reference::new(\&x);}
+\StringTok{    let z = \&mut x; //\textasciitilde{} ERROR}
+\StringTok{    let w = y;}
+\StringTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ mutable\_borrow\_while\_mutable\_borrowed\_struct() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found loan errors in function}
+\NormalTok{         mutable\_borrow\_while\_mutable\_borrowed\_struct}\StringTok{" \}}
+\StringTok{    let mut x = 0;}
+\StringTok{    let y = ReferenceMut::new(\&mut x);}
+\StringTok{    let z = \&mut x; //\textasciitilde{} ERROR}
+\StringTok{    let w = y;}
+\StringTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ immutable\_reborrow\_while\_immutable\_borrowed\_struct() }\OperatorTok{\{}
+    \KeywordTok{let}\NormalTok{ x }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ y }\OperatorTok{=} \PreprocessorTok{Reference::}\NormalTok{new(}\OperatorTok{\&}\NormalTok{x)}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ z }\OperatorTok{=} \OperatorTok{\&*}\NormalTok{y}\OperatorTok{.}\NormalTok{value}\OperatorTok{;}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ immutable\_reborrow\_while\_mutable\_borrowed\_struct() }\OperatorTok{\{}
+    \KeywordTok{let} \KeywordTok{mut}\NormalTok{ x }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ y }\OperatorTok{=} \PreprocessorTok{Reference::}\NormalTok{new(}\OperatorTok{\&}\KeywordTok{mut}\NormalTok{ x)}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ z }\OperatorTok{=} \OperatorTok{\&*}\NormalTok{y}\OperatorTok{.}\NormalTok{value}\OperatorTok{;}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ mutable\_reborrow\_while\_immutable\_borrowed\_struct() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Cannot reborrow immutable borrow as mutable" \}}
+    \KeywordTok{let}\NormalTok{ x }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ y }\OperatorTok{=} \PreprocessorTok{Reference::}\NormalTok{new(}\OperatorTok{\&}\NormalTok{x)}\OperatorTok{;}
+    \KeywordTok{let}\NormalTok{ z }\OperatorTok{=} \OperatorTok{\&}\KeywordTok{mut} \OperatorTok{*}\NormalTok{y}\OperatorTok{.}\NormalTok{value}\OperatorTok{;} \CommentTok{//\textasciitilde{} ERROR}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ read\_while\_mutable\_borrowed\_struct() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found loan errors in function}
+\NormalTok{         read\_while\_mutable\_borrowed\_struct}\StringTok{" \}}
+\StringTok{    let mut x = 0;}
+\StringTok{    let y = ReferenceMut::new(\&mut x);}
+\StringTok{    let z = x; //\textasciitilde{} ERROR}
+\StringTok{    let w = y;}
+\StringTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ write\_while\_borrowed\_struct() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found loan errors in function}
+\NormalTok{         write\_while\_borrowed\_struct}\StringTok{" \}}
+\StringTok{    let mut x = 0;}
+\StringTok{    let y = Reference::new(\&x);}
+\StringTok{    x = 1; //\textasciitilde{} ERROR}
+\StringTok{    let z = y;}
+\StringTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\begin{quote}
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{fn}\NormalTok{ write\_while\_immutable\_borrowed\_struct() }\OperatorTok{\{}
+    \CommentTok{// \{ dg{-}error "Found loan errors in function}
+\NormalTok{         write\_while\_immutable\_borrowed\_struct}\StringTok{" \}}
+\StringTok{    let x = 0;}
+\StringTok{    let y = Reference::new(\&x);}
+\StringTok{    x = 1; //\textasciitilde{} ERROR}
+\StringTok{    let z = y;}
+\StringTok{\}}
+\end{Highlighting}
+\end{Shaded}
+\end{quote}
+
+\cleardoublepage
 
 \chapter{Glossary}\label{sec:glossary}
 

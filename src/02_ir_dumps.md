@@ -13,7 +13,7 @@ fn foo(x: i32) -> Foo {
 ```
 
 
-## Abstract Syntax Tree (AST)
+## Abstract Syntax Tree (AST) {#sec:ast-dump}
 
 > `$ rustc -Z unpretty=ast-tree`
 
@@ -163,7 +163,7 @@ Fn {
 }
 ```
 
-## High-Level Intermediate Representation (HIR)
+## High-Level Intermediate Representation (HIR) {#sec:hir-dump}
 
 > `$ rustc -Z unpretty=hir-tree`
 
@@ -333,7 +333,7 @@ Expr {
 }
 ```
 
-## Mid-Level Intermediate Representation (MIR)
+## Mid-Level Intermediate Representation (MIR) {#sec:mir-dump}
 
 > `$ rustc -Z unpretty=mir -Z identify-regions`
 

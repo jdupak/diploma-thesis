@@ -10,7 +10,7 @@ OPTIONS= --from markdown+smart -s --pdf-engine=$(PDF_ENGINE) $(METADATA) $(STYLE
 DEPS=$(wildcard src/*.md) template/* Makefile
 
 thesis.pdf: $(DEPS)
-	cd src && pandoc *.md -o ../build/thesis.pdf $(OPTIONS)
+	SOURCE_DATE_EPOCH=$(date +%) cd src && pandoc *.md -o ../build/thesis.pdf $(OPTIONS)
 
 thesis.tex: $(DEPS)
 	cd src && pandoc *.md -o ../build/thesis.tex $(OPTIONS)
