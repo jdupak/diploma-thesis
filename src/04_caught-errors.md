@@ -2,9 +2,9 @@
 
 # Examples of Errors Detected by the Borrow-Checker {#sec:errors}
 
-This appendix presents some faulty program from gccrs test suite together with a fixed alternative (when applicable). Expected errors are marked using special comments used by the DejaGnu compiler testing framework.
+This appendix presents some faulty program from gccrs test suite together with fixed alternatives (when applicable).
 
-Comments staring with `//~ ERROR` provide additional details for the reader. They are not a functional part of the test suite.
+Expected errors are marked using special comments used by the DejaGnu compiler testing framework, that contains the expected error message. Comments staring with `//~ ERROR` provide additional details for the reader. They are not a functional part of the test suite.
 
 ## Move Errors
 
@@ -119,7 +119,8 @@ In this test `s` is moved while it is borrowed. The test checks that facts are c
 > }
 > 
 > fn well_formed_function_inputs() {
->     // { dg-error "Found loan errors in function well_formed...
+>     // { dg-error "Found loan errors in function
+>          well_formed_function_inputs" }
 >     let s = &mut 1;
 >     let r = &mut *s;
 >     let tmp = foo(&r  );
@@ -252,7 +253,8 @@ The tested rule should be obvious form the test name.
 
 > ```rust
 > fn write_while_borrowed() {
->     // { dg-error "Found loan errors in function write_while_borrowed" }
+>     // { dg-error "Found loan errors in function
+>          write_while_borrowed" }
 >     let mut x = 0;
 >     let y = &x;
 >     x = 1; //~ ERROR
@@ -273,9 +275,9 @@ The tested rule should be obvious form the test name.
 
 ### Access Rules Violations with Structs
 
-The following test demonstrated that the previous tests work also when the references are wrapped in structs. Type generic structs cannot be demonstrated due to a preexisting bug in gccrs. This bug is unrelated to the borrow-checker, but it creates invalid TyTy. 
+The following tests demonstrate that the previous detections work also when the references are wrapped in structs. Type generic structs cannot be demonstrated due to a preexisting bug in gccrs. This bug is unrelated to the borrow-checker, but it creates invalid TyTy. 
 
-Note that due to one limitation of the current implementation, the `impl` functions need to explicitly specify the `<'a>` lifetime parameter. This is not required and not allowed in Rust 
+Note that due to one limitation of the current implementation, the `impl` functions need to explicitly specify the `<'a>` lifetime parameter. This is not required and not allowed in Rust, but it is required by the current implementation.
 
 > ```rust
 > struct Reference<'a> {

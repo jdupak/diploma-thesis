@@ -562,8 +562,6 @@ For a thorough understanding of the exact rules, the paper and the source code a
 
 The visitor algorithm traverses each type, taking the current variance of the visited expression as input. Every type member is in a covariant position. Conversely, each function parameter member is in a contravariant position, while the return type is in a covariant position. The position of a generic argument is determined by the variance of the generic parameter (represented as a variable in this computation). The variance of the current node within the type is computed by a `transform` function, which considers both the parent node's variance and the current node's positional variance. When a lifetime or type parameter is encountered, then, if the current variance expression is constant, the variable is updated to the new variance using the join operation with the current value. For expressions containing at least one variable, the expression is added to a list of constraints. After processing all types in the crate, constraints are resolved using fixed-point computation. Note that current crates might use generic types from other crates, necessitating the export/load of variance for public types.
 
-\clearpage
-
 
 > **Example of Algorithm Execution**
 >
@@ -599,8 +597,6 @@ The visitor algorithm traverses each type, taking the current variance of the vi
 >   - `f1` remains bivariant, as it is not mentioned in the type.
 >   - `f2` is invariant due to its usage in both covariant and contravariant positions.
 > \
-
-\clearpage
 
 ## Error Reporting
 
@@ -696,8 +692,6 @@ The main bottleneck in the current implementation is the BIR builder. After cove
 - The current integration with the build system is not viable for production. Refer to the beginning of this [chapter](#implementation) for details.
 - Only information about the presence and category of violations is passed back to the borrow checker; details about the violations themselves are not.
 - Errors are reported only at the function level (and using debug output), which can be problematic for automated testing if tests fail or succeed for incorrect reasons.
-
-\clearpage
 
 ## Building, Usage, and Debugging
 

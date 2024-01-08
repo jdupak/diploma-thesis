@@ -2,7 +2,7 @@
 
 # Comparison of BIR and MIR
 
-BIR and MIR dump of the following code are displayed parallel, BIR on left pages and MIR on right pages. Note that assert macros in MIR were simplified to fit onto the page.
+BIR and MIR dump of the following code are displayed parallel, BIR on left pages and MIR on right pages. Note that _assert_ macros in MIR were simplified to fit onto the page.
 
 ## Compilation Commands
 
