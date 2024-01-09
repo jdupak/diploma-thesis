@@ -12,6 +12,7 @@ fn foo(x: i32) -> Foo {
 }
 ```
 
+\clearpage
 
 ## Abstract Syntax Tree (AST) {#sec:ast-dump}
 
@@ -163,6 +164,8 @@ Fn {
 }
 ```
 
+\clearpage
+
 ## High-Level Intermediate Representation (HIR) {#sec:hir-dump}
 
 > `$ rustc -Z unpretty=hir-tree`
@@ -272,10 +275,7 @@ Expr {
                     Path {
                         span: simple.rs:4:5: 4:8 (#0),
                         res: Def(
-                            Ctor(
-                                Struct,
-                                Fn,
-                            ),
+                            Ctor(Struct, Fn),
                             DefId(0:4 ~ simple[415f]::Foo::{constructor#0}),
                         ),
                         segments: [
@@ -283,10 +283,7 @@ Expr {
                                 ident: Foo#0,
                                 hir_id: HirId(DefId(0:6 ~ simple[415f]::foo).5),
                                 res: Def(
-                                    Ctor(
-                                        Struct,
-                                        Fn,
-                                    ),
+                                    Ctor(Struct, Fn),
                                     DefId(0:4 ~ simple[415f]::Foo::{constructor#0}),
                                 ),
                                 args: None,
@@ -332,6 +329,8 @@ Expr {
     span: simple.rs:4:5: 4:11 (#0),
 }
 ```
+
+\clearpage
 
 ## Mid-Level Intermediate Representation (MIR) {#sec:mir-dump}
 

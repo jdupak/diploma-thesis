@@ -20,7 +20,9 @@ toc: true
 geometry:
 - a4paper
 - top=32mm
-- left=35.6mm
-- right=35.6mm
+#- inner=35.6mm
+#- outer=35.6mm
+- inner=40.6mm
+- outer=30.6mm
 - bottom=30mm
 autoSectionLabels: true

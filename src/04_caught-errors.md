@@ -4,7 +4,7 @@
 
 This appendix presents some faulty program from gccrs test suite together with fixed alternatives (when applicable).
 
-Expected errors are marked using special comments used by the DejaGnu compiler testing framework, that contains the expected error message. Comments staring with `//~ ERROR` provide additional details for the reader. They are not a functional part of the test suite.
+Expected errors are marked using special comments used by the DejaGnu compiler testing framework, that contain the expected error message. Comments staring with `//~ ERROR` provide additional details for the reader. They are not a functional part of the test suite.
 
 ## Move Errors
 
